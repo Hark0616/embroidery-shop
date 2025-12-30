@@ -1,4 +1,4 @@
-# MENTA SHOP
+# TEXERE SHOP
 
 Landing page para sitio de afiliados especializado en productos naturales de Natura y NovaVenta.
 

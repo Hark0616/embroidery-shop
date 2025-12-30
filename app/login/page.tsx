@@ -10,9 +10,9 @@ export default function LoginPage() {
   async function handleSubmit(formData: FormData) {
     setLoading(true)
     setError(null)
-    
+
     const result = await login(formData)
-    
+
     if (result?.error) {
       setError(result.error)
       setLoading(false)
@@ -20,30 +20,30 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-mint flex items-center justify-center px-4">
-      <div className="max-w-sm w-full">
+    <div className="min-h-screen bg-industrial-black flex items-center justify-center px-4">
+      <div className="max-w-sm w-full border border-industrial-gray p-8 bg-white/5 backdrop-blur-sm">
         {/* Logo */}
         <div className="text-center mb-10">
-          <h1 className="font-heading text-2xl tracking-[0.15em] text-jungle-deep">
-            MENTA<span className="text-gold">.</span>
+          <h1 className="font-heading font-black text-2xl tracking-tighter text-industrial-white">
+            PUNTO<span className="text-industrial-warning">.ZERO</span>
           </h1>
-          <p className="text-jungle-muted text-sm mt-2">Panel de Administración</p>
+          <p className="text-industrial-gray font-mono text-xs mt-2 uppercase tracking-widest">Admin Access</p>
         </div>
 
         {/* Formulario */}
-        <form action={handleSubmit} className="space-y-5">
+        <form action={handleSubmit} className="space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-sm text-sm">
-              {error === 'Invalid login credentials' 
-                ? 'Email o contraseña incorrectos' 
+            <div className="bg-red-500/10 border border-red-500/30 text-red-500 px-4 py-3 text-xs font-mono uppercase">
+              {error === 'Invalid login credentials'
+                ? 'Credenciales Inválidas'
                 : error}
             </div>
           )}
 
           <div>
-            <label 
-              htmlFor="email" 
-              className="block text-jungle-muted text-xs tracking-wide uppercase mb-2"
+            <label
+              htmlFor="email"
+              className="block text-industrial-gray text-[10px] tracking-widest uppercase mb-2 font-bold"
             >
               Email
             </label>
@@ -53,20 +53,19 @@ export default function LoginPage() {
               type="email"
               required
               autoComplete="email"
-              className="w-full px-4 py-3 bg-white border border-mint-border rounded-sm
-                text-jungle-deep placeholder:text-jungle-muted/50
-                focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold
-                transition-colors duration-200"
-              placeholder="tu@email.com"
+              className="w-full px-4 py-3 bg-industrial-black border border-industrial-gray text-industrial-white
+                focus:outline-none focus:border-industrial-warning
+                transition-colors duration-200 placeholder-gray-700 font-mono text-sm"
+              placeholder="admin@puntozero.com"
             />
           </div>
 
           <div>
-            <label 
-              htmlFor="password" 
-              className="block text-jungle-muted text-xs tracking-wide uppercase mb-2"
+            <label
+              htmlFor="password"
+              className="block text-industrial-gray text-[10px] tracking-widest uppercase mb-2 font-bold"
             >
-              Contraseña
+              Password
             </label>
             <input
               id="password"
@@ -74,10 +73,9 @@ export default function LoginPage() {
               type="password"
               required
               autoComplete="current-password"
-              className="w-full px-4 py-3 bg-white border border-mint-border rounded-sm
-                text-jungle-deep placeholder:text-jungle-muted/50
-                focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold
-                transition-colors duration-200"
+              className="w-full px-4 py-3 bg-industrial-black border border-industrial-gray text-industrial-white
+                focus:outline-none focus:border-industrial-warning
+                transition-colors duration-200 placeholder-gray-700 font-mono text-sm"
               placeholder="••••••••"
             />
           </div>
@@ -85,19 +83,19 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-jungle-deep text-mint text-xs tracking-[0.2em] uppercase
-              hover:bg-jungle transition-colors duration-300
+            className="w-full py-4 bg-industrial-warning text-industrial-black font-bold text-sm tracking-widest uppercase
+              hover:bg-white transition-colors duration-300
               disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Ingresando...' : 'Ingresar'}
+            {loading ? 'Accediendo...' : 'Entrar'}
           </button>
         </form>
 
         {/* Link para volver */}
         <div className="text-center mt-8">
-          <a 
-            href="/" 
-            className="text-jungle-muted text-xs hover:text-jungle-deep transition-colors"
+          <a
+            href="/"
+            className="text-industrial-gray text-xs hover:text-industrial-white transition-colors uppercase tracking-wider font-mono"
           >
             ← Volver al sitio
           </a>

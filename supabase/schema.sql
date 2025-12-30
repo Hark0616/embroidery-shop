@@ -1,5 +1,5 @@
 -- =============================================
--- SCHEMA DE BASE DE DATOS MENTA
+-- SCHEMA DE BASE DE DATOS TEXERE
 -- Ejecutar en Supabase SQL Editor
 -- =============================================
 
