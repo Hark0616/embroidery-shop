@@ -2,9 +2,13 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
-  // Sanitize URL: remove quotes and whitespace that users might accidentally paste
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/["']/g, "").trim();
+  // Sanitize URL: remove quotes, whitespace, and ensure protocol
+  let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/["']/g, "").trim();
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.replace(/["']/g, "").trim();
+
+  if (supabaseUrl && !supabaseUrl.startsWith("http")) {
+    supabaseUrl = `https://${supabaseUrl}`;
+  }
 
   if (!supabaseUrl || !supabaseKey) {
     return null
