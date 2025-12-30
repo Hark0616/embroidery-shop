@@ -3,8 +3,15 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
   try {
-    // Si no hay variables de Supabase, permitir acceso sin protección
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    // Sanitize URL: remove quotes, whitespace, and ensure protocol
+    let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/["']/g, "").trim();
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.replace(/["']/g, "").trim();
+
+    if (supabaseUrl && !supabaseUrl.startsWith("http")) {
+      supabaseUrl = `https://${supabaseUrl}`;
+    }
+
+    if (!supabaseUrl || !supabaseKey) {
       // Bloquear acceso a /admin si no hay Supabase configurado
       if (request.nextUrl.pathname.startsWith('/admin')) {
         const url = request.nextUrl.clone()
@@ -19,8 +26,8 @@ export async function updateSession(request: NextRequest) {
     })
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      supabaseUrl,
+      supabaseKey,
       {
         cookies: {
           getAll() {
