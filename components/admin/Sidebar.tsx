@@ -17,23 +17,23 @@ const navItems = [
     ),
   },
   {
-    name: 'Productos',
-    href: '/admin/productos',
+    name: 'Prendas (Hoodies/Tees)',
+    href: '/admin/prendas',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-          d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+          d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
         />
       </svg>
     ),
   },
   {
-    name: 'Categorías',
-    href: '/admin/categorias',
+    name: 'Diseños Bordado',
+    href: '/admin/disenos',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-          d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
         />
       </svg>
     ),
@@ -44,15 +44,15 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-64 bg-white border-r border-mint-border min-h-screen flex flex-col">
+    <aside className="w-64 bg-industrial-black border-r border-industrial-gray/20 min-h-screen flex flex-col">
       {/* Logo */}
-      <div className="p-6 border-b border-mint-border">
+      <div className="p-6 border-b border-industrial-gray/20">
         <Link href="/admin" className="block">
-          <h1 className="font-heading text-xl tracking-[0.12em] text-jungle-deep">
-            TEXERE<span className="text-gold">.</span>
+          <h1 className="font-heading font-black text-xl tracking-tighter text-industrial-white">
+            PUNTO<span className="text-industrial-warning">.ZERO</span>
           </h1>
-          <p className="text-jungle-muted text-[10px] tracking-wide mt-1">
-            Panel de Administración
+          <p className="text-industrial-gray font-mono text-[10px] tracking-widest mt-1 uppercase">
+            Admin Console
           </p>
         </Link>
       </div>
@@ -68,11 +68,11 @@ export default function Sidebar() {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-sm text-sm
-                    transition-colors duration-200
+                  className={`flex items-center gap-3 px-4 py-3 text-xs uppercase tracking-widest font-mono
+                    transition-all duration-200 border-l-2
                     ${isActive
-                      ? 'bg-mint text-jungle-deep font-medium'
-                      : 'text-jungle-muted hover:bg-mint/50 hover:text-jungle-deep'
+                      ? 'border-industrial-warning bg-white/5 text-industrial-white font-bold'
+                      : 'border-transparent text-industrial-gray hover:bg-white/5 hover:text-industrial-white'
                     }`}
                 >
                   {item.icon}
@@ -85,13 +85,13 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer con logout */}
-      <div className="p-4 border-t border-mint-border">
+      <div className="p-4 border-t border-industrial-gray/20">
         <form action={logout}>
           <button
             type="submit"
-            className="flex items-center gap-3 px-4 py-3 w-full text-sm
-              text-jungle-muted hover:bg-red-50 hover:text-red-600 
-              rounded-sm transition-colors duration-200"
+            className="flex items-center gap-3 px-4 py-3 w-full text-xs uppercase tracking-widest font-mono
+              text-industrial-gray hover:bg-red-500/10 hover:text-red-500 
+              transition-colors duration-200"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -107,9 +107,9 @@ export default function Sidebar() {
           href="/"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-3 px-4 py-3 mt-1 text-sm
-            text-jungle-muted hover:bg-mint/50 hover:text-jungle-deep 
-            rounded-sm transition-colors duration-200"
+          className="flex items-center gap-3 px-4 py-3 mt-1 text-xs uppercase tracking-widest font-mono
+            text-industrial-gray hover:bg-white/5 hover:text-industrial-white 
+            transition-colors duration-200"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
