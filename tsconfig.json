@@ -16,7 +16,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "increTEXEREl": true,
+    "incremental": true,
     "plugins": [
       {
         "name": "next"
