@@ -96,13 +96,12 @@ export default async function AdminDashboard() {
             <p className="text-xs text-gray-400 mb-4 h-10">
               Modifica el mensaje global de "Tiempo de Espera" (15 días, 30 días, etc.)
             </p>
-            <a
-              href="https://supabase.com/dashboard/project/_/editor"
-              target="_blank"
+            <Link
+              href="/admin/config"
               className="inline-block w-full text-center border border-white text-white px-4 py-3 font-bold text-xs uppercase tracking-widest hover:bg-white hover:text-industrial-black transition-colors"
             >
-              Editar Config Global ↗
-            </a>
+              Editar Config Global
+            </Link>
           </div>
         </div>
       </div>
