@@ -51,7 +51,7 @@ export default function Sidebar() {
           <h1 className="font-heading font-black text-xl tracking-tighter text-industrial-white">
             TEXERE<span className="text-industrial-warning">.ART</span>
           </h1>
-          <p className="text-industrial-gray font-mono text-[10px] tracking-widest mt-1 uppercase">
+          <p className="text-gray-500 font-mono text-[10px] tracking-widest mt-1 uppercase">
             Admin Console
           </p>
         </Link>
@@ -72,7 +72,7 @@ export default function Sidebar() {
                     transition-all duration-200 border-l-2
                     ${isActive
                       ? 'border-industrial-warning bg-white/5 text-industrial-white font-bold'
-                      : 'border-transparent text-industrial-gray hover:bg-white/5 hover:text-industrial-white'
+                      : 'border-transparent text-gray-400 hover:bg-white/5 hover:text-industrial-white'
                     }`}
                 >
                   {item.icon}
@@ -90,7 +90,7 @@ export default function Sidebar() {
           <button
             type="submit"
             className="flex items-center gap-3 px-4 py-3 w-full text-xs uppercase tracking-widest font-mono
-              text-industrial-gray hover:bg-red-500/10 hover:text-red-500 
+              text-gray-400 hover:bg-red-500/10 hover:text-red-500 
               transition-colors duration-200"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,7 +108,7 @@ export default function Sidebar() {
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-3 px-4 py-3 mt-1 text-xs uppercase tracking-widest font-mono
-            text-industrial-gray hover:bg-white/5 hover:text-industrial-white 
+            text-gray-400 hover:bg-white/5 hover:text-industrial-white 
             transition-colors duration-200"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
