@@ -14,7 +14,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'PUNTO.ZERO | Custom Embroidery',
+  title: 'TEXERE.ART | Custom Embroidery',
   description: 'Fabricación bajo pedido. Bordados personalizados sin stock.',
 };
 

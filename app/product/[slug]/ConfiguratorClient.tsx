@@ -88,7 +88,7 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
 
                     {/* Watermark / Label */}
                     <div className="absolute bottom-4 left-4 z-30 font-mono text-xs text-industrial-gray/50 uppercase">
-                        Punto.Zero Visualizer v1.0
+                        Texere.Art Visualizer v1.0
                     </div>
                 </div>
             </div>

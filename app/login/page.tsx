@@ -25,7 +25,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <h1 className="font-heading font-black text-2xl tracking-tighter text-industrial-white">
-            PUNTO<span className="text-industrial-warning">.ZERO</span>
+            TEXERE<span className="text-industrial-warning">.ART</span>
           </h1>
           <p className="text-industrial-gray font-mono text-xs mt-2 uppercase tracking-widest">Admin Access</p>
         </div>
@@ -56,7 +56,7 @@ export default function LoginPage() {
               className="w-full px-4 py-3 bg-industrial-black border border-industrial-gray text-industrial-white
                 focus:outline-none focus:border-industrial-warning
                 transition-colors duration-200 placeholder-gray-700 font-mono text-sm"
-              placeholder="admin@puntozero.com"
+              placeholder="admin@texere.art"
             />
           </div>
 

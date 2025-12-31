@@ -49,7 +49,7 @@ export default function Sidebar() {
       <div className="p-6 border-b border-industrial-gray/20">
         <Link href="/admin" className="block">
           <h1 className="font-heading font-black text-xl tracking-tighter text-industrial-white">
-            PUNTO<span className="text-industrial-warning">.ZERO</span>
+            TEXERE<span className="text-industrial-warning">.ART</span>
           </h1>
           <p className="text-industrial-gray font-mono text-[10px] tracking-widest mt-1 uppercase">
             Admin Console

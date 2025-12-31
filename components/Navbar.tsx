@@ -9,7 +9,7 @@ export default function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex-shrink-0 flex items-center gap-2 group">
             <span className="font-heading font-black text-2xl tracking-tighter text-industrial-black group-hover:text-industrial-gray transition-colors">
-              PUNTO<span className="text-industrial-warning">.</span>ZERO
+              TEXERE<span className="text-industrial-warning">.</span>ART
             </span>
           </Link>
 
