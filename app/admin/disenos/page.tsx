@@ -20,17 +20,15 @@ export default async function DisenosPage() {
             Catálogo de diseños disponibles para personalización
           </p>
         </div>
-        <a
-          href="https://supabase.com/dashboard/project/_/editor"
-          target="_blank"
-          className="inline-flex items-center gap-2 px-6 py-4 bg-industrial-warning text-industrial-black 
-            text-xs font-bold tracking-widest uppercase hover:bg-white transition-colors duration-200"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Gestionar en Supabase ↗
-        </a>
+        <div className="flex gap-4">
+          <a
+            href="/admin/disenos/new"
+            className="inline-flex items-center gap-2 px-6 py-4 bg-industrial-black text-industrial-white 
+              text-xs font-bold tracking-widest uppercase hover:bg-industrial-gray transition-colors duration-200 border border-industrial-gray"
+          >
+            + Nuevo Diseño
+          </a>
+        </div>
       </div>
 
       {/* Tabla de Diseños */}
@@ -46,7 +44,7 @@ export default async function DisenosPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-industrial-gray/10">
-            {designs?.map((design: any) => (
+            {designs?.map((design: import('@/lib/types/database').EmbroideryDesign) => (
               <tr key={design.id} className="hover:bg-industrial-light/50 transition-colors">
                 <td className="px-6 py-4">
                   <div className="w-16 h-16 bg-gray-100 flex items-center justify-center p-2 border border-gray-200">

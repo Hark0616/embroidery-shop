@@ -19,17 +19,15 @@ export default async function PrendasPage() {
             Hoodies, Camisetas y otros soportes (Stock Cero)
           </p>
         </div>
-        <a
-          href="https://supabase.com/dashboard/project/_/editor"
-          target="_blank"
-          className="inline-flex items-center gap-2 px-6 py-4 bg-industrial-warning text-industrial-black 
-            text-xs font-bold tracking-widest uppercase hover:bg-white transition-colors duration-200"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Gestionar en Supabase ↗
-        </a>
+        <div className="flex gap-4">
+          <a
+            href="/admin/prendas/new"
+            className="inline-flex items-center gap-2 px-6 py-4 bg-industrial-black text-industrial-white 
+              text-xs font-bold tracking-widest uppercase hover:bg-industrial-gray transition-colors duration-200 border border-industrial-gray"
+          >
+            + Nuevo Producto
+          </a>
+        </div>
       </div>
 
       {/* Tabla de Prendas */}
@@ -45,7 +43,7 @@ export default async function PrendasPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-industrial-gray/10">
-            {products?.map((product: any) => (
+            {products?.map((product: import('@/lib/types/database').BaseProduct) => (
               <tr key={product.id} className="hover:bg-industrial-light/50 transition-colors">
                 <td className="px-6 py-4">
                   <div className="w-16 h-16 bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
@@ -75,8 +73,8 @@ export default async function PrendasPage() {
                 </td>
                 <td className="px-6 py-4 text-center">
                   <span className={`inline-block px-2 py-1 text-[10px] uppercase tracking-widest font-bold border ${product.stock_status === 'available'
-                      ? 'border-green-500 text-green-700 bg-green-50'
-                      : 'border-red-500 text-red-700 bg-red-50'
+                    ? 'border-green-500 text-green-700 bg-green-50'
+                    : 'border-red-500 text-red-700 bg-red-50'
                     }`}>
                     {product.stock_status}
                   </span>

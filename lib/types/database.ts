@@ -106,6 +106,82 @@ export interface Database {
           updated_at?: string
         }
       }
+      base_products: {
+        Row: {
+          id: string
+          name: string
+          slug: string
+          base_price: number
+          colors: string[]
+          sizes: string[]
+          stock_status: string
+          image_url: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          slug: string
+          base_price: number
+          colors: string[]
+          sizes: string[]
+          stock_status: string
+          image_url: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          slug?: string
+          base_price?: number
+          colors?: string[]
+          sizes?: string[]
+          stock_status?: string
+          image_url?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      embroidery_designs: {
+        Row: {
+          id: string
+          name: string
+          category: string
+          price_modifier: number
+          dimensions: string
+          image_url: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          category: string
+          price_modifier: number
+          dimensions: string
+          image_url: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          price_modifier?: number
+          dimensions?: string
+          image_url?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }
@@ -118,4 +194,7 @@ export type CategoryUpdate = Database['public']['Tables']['categories']['Update'
 export type Product = Database['public']['Tables']['products']['Row']
 export type ProductInsert = Database['public']['Tables']['products']['Insert']
 export type ProductUpdate = Database['public']['Tables']['products']['Update']
+
+export type BaseProduct = Database['public']['Tables']['base_products']['Row']
+export type EmbroideryDesign = Database['public']['Tables']['embroidery_designs']['Row']
 
