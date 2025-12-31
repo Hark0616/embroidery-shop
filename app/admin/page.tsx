@@ -75,13 +75,20 @@ export default async function AdminDashboard() {
             <p className="text-xs text-gray-400 mb-4 h-10">
               Sube nuevos hoodies, camisetas o diseños directamente en la base de datos.
             </p>
-            <a
-              href="https://supabase.com/dashboard/project/_/editor"
-              target="_blank"
-              className="inline-block w-full text-center bg-white text-industrial-black px-4 py-3 font-bold text-xs uppercase tracking-widest hover:bg-industrial-warning transition-colors"
-            >
-              Ir a Supabase Studio ↗
-            </a>
+            <div className="flex flex-col gap-2">
+              <Link
+                href="/admin/prendas/new"
+                className="inline-block w-full text-center bg-white text-industrial-black px-4 py-3 font-bold text-xs uppercase tracking-widest hover:bg-industrial-warning transition-colors"
+              >
+                + Nueva Prenda
+              </Link>
+              <Link
+                href="/admin/disenos/new"
+                className="inline-block w-full text-center border border-white text-white px-4 py-3 font-bold text-xs uppercase tracking-widest hover:bg-white hover:text-industrial-black transition-colors"
+              >
+                + Nuevo Diseño
+              </Link>
+            </div>
           </div>
 
           <div className="border border-industrial-gray/30 p-4 bg-white/5">
