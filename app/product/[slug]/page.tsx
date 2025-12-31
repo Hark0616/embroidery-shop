@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { getDeliveryTime } from '@/lib/actions/config';
 import Image from 'next/image';
 import ConfiguratorClient from './ConfiguratorClient';
 import { notFound } from 'next/navigation';
@@ -37,14 +38,8 @@ export default async function ProductPage({ params }: { params: { slug: string }
         .eq('is_active', true)
         .order('name');
 
-    // 3. Fetch Lead Time (for checkout message) - Optional optimization: pass as prop or fetch on client
-    const { data: leadTimeConfig } = await supabase!
-        .from('config_global')
-        .select('value')
-        .eq('key', 'lead_time_message')
-        .single();
-
-    const leadTime = leadTimeConfig?.value || '15 días hábiles';
+    // 3. Fetch Lead Time
+    const leadTime = await getDeliveryTime();
 
     return (
         <div className="min-h-screen bg-white">
