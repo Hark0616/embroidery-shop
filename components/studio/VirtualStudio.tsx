@@ -6,11 +6,14 @@ import Visualizer from './Visualizer';
 import OptionSelector from './OptionSelector';
 import { buildWhatsAppMessage } from '@/lib/whatsapp';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface VirtualStudioProps {
     products: BaseProduct[];
     designs: EmbroideryDesign[];
 }
+
+type StudioStep = 'product' | 'design' | 'details' | 'checkout';
 
 export default function VirtualStudio({ products, designs }: VirtualStudioProps) {
     const router = useRouter();
@@ -21,12 +24,21 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
     const initialDesignId = searchParams.get('design');
 
     const [selectedProduct, setSelectedProduct] = useState<BaseProduct | null>(
-        products.find(p => p.slug === initialProductSlug) || products[0] || null
+        products.find(p => p.slug === initialProductSlug) || null
     );
 
     const [selectedDesign, setSelectedDesign] = useState<EmbroideryDesign | null>(
         designs.find(d => d.id === initialDesignId) || null
     );
+
+    // Simple step logic: defaults to product, but if product exists -> design. 
+    // If both exist -> details.
+    const [activeStep, setActiveStep] = useState<StudioStep>(() => {
+        if (initialProductSlug && initialDesignId) return 'details';
+        if (initialProductSlug) return 'design';
+        if (initialDesignId) return 'product';
+        return 'product';
+    });
 
     const [selectedColor, setSelectedColor] = useState<string>('');
     const [selectedSize, setSelectedSize] = useState<string>('');
@@ -41,9 +53,9 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
                 setSelectedSize(selectedProduct.sizes[0] || '');
             }
         }
-    }, [selectedProduct, selectedColor, selectedSize]); // Fixed dependency array logic inside
+    }, [selectedProduct, selectedColor, selectedSize]);
 
-    // Update URL when selections change (shallow routing)
+    // Update URL function
     const updateUrl = (key: 'product' | 'design', value: string) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set(key, value);
@@ -55,6 +67,7 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         if (product) {
             setSelectedProduct(product);
             updateUrl('product', slug);
+            setActiveStep('design'); // Auto-advance
         }
     };
 
@@ -63,6 +76,7 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         if (design) {
             setSelectedDesign(design);
             updateUrl('design', id);
+            setActiveStep('details'); // Auto-advance
         }
     };
 
@@ -87,7 +101,7 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         window.open(url, '_blank');
     };
 
-    // Memoize option lists
+    // Memoize options
     const productOptions = useMemo(() => products.map(p => ({
         id: p.id,
         name: p.name,
@@ -106,7 +120,7 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         id: c,
         name: c,
         value: c,
-        colorHex: c // In a real app we'd map names to hex codes
+        colorHex: c
     })) || [], [selectedProduct]);
 
     const sizeOptions = useMemo(() => selectedProduct?.sizes.map(s => ({
@@ -114,6 +128,31 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         name: s,
         value: s
     })) || [], [selectedProduct]);
+
+    // Helper render for step header
+    const renderStepHeader = (step: StudioStep, label: string, isCompleted: boolean) => (
+        <div
+            onClick={() => setActiveStep(step)}
+            className={`flex items-center justify-between p-4 border rounded-sm cursor-pointer transition-all mb-4 ${activeStep === step
+                    ? 'border-industrial-black bg-industrial-black text-white'
+                    : 'border-industrial-gray/20 bg-white hover:border-industrial-gray'
+                }`}
+        >
+            <span className="font-heading font-bold uppercase tracking-widest text-sm">
+                {label}
+            </span>
+            {isCompleted && activeStep !== step && (
+                <span className="text-industrial-warning text-xs font-mono">
+                    ✓ CAMBIAR
+                </span>
+            )}
+            {activeStep === step && (
+                <span className="text-xs font-mono opacity-50">
+                    EDITANDO
+                </span>
+            )}
+        </div>
+    );
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start min-h-[calc(100vh-64px)] p-4 md:p-8">
@@ -126,11 +165,11 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
                 />
             </div>
 
-            {/* RIGHT: Controls */}
-            <div className="order-2 lg:order-2 lg:col-span-5 flex flex-col gap-8 pb-20">
+            {/* RIGHT: Controls - Progressive Stepper */}
+            <div className="order-2 lg:order-2 lg:col-span-5 flex flex-col gap-2 pb-20">
 
                 {/* Header */}
-                <div className="border-b border-industrial-gray/20 pb-4">
+                <div className="mb-4">
                     <h1 className="font-heading font-black text-3xl uppercase tracking-tighter mb-2">
                         Personalizador
                     </h1>
@@ -139,46 +178,68 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
                     </p>
                 </div>
 
-                {/* 1. Select Product */}
-                <OptionSelector
-                    label="1. Elige tu Base"
-                    items={productOptions}
-                    selectedId={selectedProduct?.slug || null}
-                    onSelect={handleProductSelect}
-                    type="grid"
-                />
-
-                {/* 2. Select Design */}
-                <OptionSelector
-                    label="2. Elige tu Diseño"
-                    items={designOptions}
-                    selectedId={selectedDesign?.id || null}
-                    onSelect={handleDesignSelect}
-                    type="grid"
-                />
-
-                {/* 3. Details (If product selected) */}
-                {selectedProduct && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* STEP 1: PRODUCT */}
+                {activeStep === 'product' ? (
+                    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                         <OptionSelector
-                            label="3. Color"
-                            items={colorOptions}
-                            selectedId={selectedColor}
-                            onSelect={setSelectedColor}
-                            type="swatch" // Using text list for now as hex mapping is missing, actually just using list for safety
-                        />
-                        <OptionSelector
-                            label="4. Talla"
-                            items={sizeOptions}
-                            selectedId={selectedSize}
-                            onSelect={setSelectedSize}
-                            type="list"
+                            label="1. Elige tu Base"
+                            items={productOptions}
+                            selectedId={selectedProduct?.slug || null}
+                            onSelect={handleProductSelect}
+                            type="grid"
                         />
                     </div>
+                ) : (
+                    renderStepHeader('product', `1. Base: ${selectedProduct?.name || 'Seleccionar'}`, !!selectedProduct)
+                )}
+
+                {/* STEP 2: DESIGN */}
+                {/* Only show if product selected or this is active step */}
+                {(selectedProduct || activeStep === 'design') && (
+                    activeStep === 'design' ? (
+                        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                            <OptionSelector
+                                label="2. Elige tu Diseño"
+                                items={designOptions}
+                                selectedId={selectedDesign?.id || null}
+                                onSelect={handleDesignSelect}
+                                type="grid"
+                            />
+                        </div>
+                    ) : (
+                        renderStepHeader('design', `2. Diseño: ${selectedDesign?.name || 'Seleccionar'}`, !!selectedDesign)
+                    )
+                )}
+
+                {/* STEP 3: DETAILS */}
+                {(selectedDesign && selectedProduct || activeStep === 'details') && (
+                    activeStep === 'details' ? (
+                        <div className="animate-in fade-in slide-in-from-right-4 duration-300 border p-4 rounded-sm border-industrial-gray/20">
+                            <h3 className="font-heading font-bold text-sm uppercase tracking-widest mb-4">
+                                3. Personaliza Detalles
+                            </h3>
+                            <OptionSelector
+                                label="Color"
+                                items={colorOptions}
+                                selectedId={selectedColor}
+                                onSelect={setSelectedColor}
+                                type="swatch"
+                            />
+                            <OptionSelector
+                                label="Talla"
+                                items={sizeOptions}
+                                selectedId={selectedSize}
+                                onSelect={setSelectedSize}
+                                type="list"
+                            />
+                        </div>
+                    ) : (
+                        renderStepHeader('details', `3. Detalles: ${selectedColor} / ${selectedSize}`, handleValidation())
+                    )
                 )}
 
                 {/* Footer Actions */}
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-industrial-gray/10 lg:static lg:border-0 lg:p-0 lg:bg-transparent z-40">
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-industrial-gray/10 lg:static lg:border-0 lg:p-0 lg:bg-transparent z-40 mt-auto">
                     <button
                         onClick={handleWhatsAppCheckout}
                         disabled={!handleValidation()}
@@ -187,9 +248,6 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
                         <span className="text-xl">💬</span>
                         {handleValidation() ? 'Pedir por WhatsApp' : 'Completa tu selección'}
                     </button>
-                    <p className="text-center text-[10px] text-gray-400 mt-2 font-mono uppercase">
-                        Serás redirigido a WhatsApp para confirmar
-                    </p>
                 </div>
             </div>
 
