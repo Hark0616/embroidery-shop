@@ -1,11 +1,13 @@
 'use server'
 
+import { requireAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
 import { uploadImage } from './storage'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 export async function createProduct(formData: FormData) {
+  await requireAdmin()
   const supabase = await createClient()
 
   if (!supabase) {

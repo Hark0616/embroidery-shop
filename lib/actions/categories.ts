@@ -2,11 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/guards'
 
 export async function getCategories() {
   const supabase = await createClient()
   if (!supabase) return []
-  
+
   const { data, error } = await supabase
     .from('categories')
     .select('*')
@@ -23,7 +24,7 @@ export async function getCategories() {
 export async function getCategoriesWithParent() {
   const supabase = await createClient()
   if (!supabase) return []
-  
+
   const { data, error } = await supabase
     .from('categories')
     .select(`
@@ -41,6 +42,7 @@ export async function getCategoriesWithParent() {
 }
 
 export async function createCategory(formData: FormData) {
+  await requireAdmin()
   const supabase = await createClient()
   if (!supabase) return { error: 'Supabase no configurado' }
 
@@ -72,6 +74,7 @@ export async function createCategory(formData: FormData) {
 }
 
 export async function updateCategory(id: string, formData: FormData) {
+  await requireAdmin()
   const supabase = await createClient()
   if (!supabase) return { error: 'Supabase no configurado' }
 
@@ -106,6 +109,7 @@ export async function updateCategory(id: string, formData: FormData) {
 }
 
 export async function deleteCategory(id: string) {
+  await requireAdmin()
   const supabase = await createClient()
   if (!supabase) return { error: 'Supabase no configurado' }
 

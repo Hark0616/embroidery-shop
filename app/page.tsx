@@ -34,7 +34,7 @@ export default async function Home() {
             <span className="text-industrial-warning">Bajo Pedido</span>
           </h1>
           <p className="font-mono text-sm md:text-base text-gray-400 mb-10 max-w-xl mx-auto tracking-widest uppercase">
-            Sin stock. Sin desperdicio. Tu diseño, tu prenda, tu tiempo.
+            Tu diseño, tu prenda, tu tiempo.
           </p>
           <Link
             href="/catalog"
@@ -55,7 +55,7 @@ export default async function Home() {
                 Archivo <span className="text-transparent bg-clip-text bg-gradient-to-r from-industrial-black to-gray-500">Industrial</span>
               </h2>
               <p className="font-mono text-sm text-industrial-gray uppercase tracking-widest">
-                Tendencias Globales / Curaduría Local
+                Ultimos diseños añadidos
               </p>
             </div>
 

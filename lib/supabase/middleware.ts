@@ -84,9 +84,16 @@ export async function updateSession(request: NextRequest) {
 
     return supabaseResponse
   } catch (e) {
-    // Si algo falla crítico en middleware, permitimos pasar (fail open)
-    // para no tumbar el sitio, pero logueamos el error.
     console.error('Middleware Error:', e)
+
+    // Fail Closed: Si hay un error crítico y estamos intentando acceder a admin,
+    // denegar el acceso por seguridad.
+    if (request.nextUrl.pathname.startsWith('/admin')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
     return NextResponse.next({
       request: {
         headers: request.headers,
