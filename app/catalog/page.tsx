@@ -41,7 +41,7 @@ export default async function CatalogPage() {
                     {products.map((product) => (
                         <Link
                             key={product.id}
-                            href={`/product/${product.slug}`}
+                            href={`/studio?product=${product.slug}`}
                             className="group block border border-transparent hover:border-industrial-gray/20 p-4 transition-all duration-300 bg-white"
                         >
                             <div className="aspect-[4/5] relative bg-gray-100 mb-4 overflow-hidden">

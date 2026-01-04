@@ -16,10 +16,22 @@ export default function Navbar() {
           {/* Links */}
           <div className="flex items-center gap-8">
             <Link
+              href="/studio"
+              className="font-heading text-sm font-bold uppercase tracking-widest text-industrial-black hover:text-industrial-warning transition-colors"
+            >
+              Studio
+            </Link>
+            <Link
               href="/catalog"
               className="font-heading text-sm font-bold uppercase tracking-widest text-industrial-black hover:text-industrial-warning transition-colors"
             >
               Catálogo
+            </Link>
+            <Link
+              href="/designs"
+              className="font-heading text-sm font-bold uppercase tracking-widest text-industrial-black hover:text-industrial-warning transition-colors"
+            >
+              Diseños
             </Link>
             <Link
               href="https://wa.me/573013732290"
