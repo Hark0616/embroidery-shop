@@ -15,7 +15,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'TEXERE.ART | Custom Embroidery',
-  description: 'Fabricación bajo pedido. Bordados personalizados sin stock.',
+  description: 'Fabricación bajo pedido. Bordados personalizados.',
 };
 
 export default function RootLayout({

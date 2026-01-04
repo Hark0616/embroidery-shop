@@ -1,7 +1,24 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import { createClient } from '@/lib/supabase/server';
 
-export default function Home() {
+export const revalidate = 60; // Revalidate every minute so it doesn't get stale
+
+export default async function Home() {
+  const supabase = await createClient();
+  let trendingDesigns = [];
+
+  if (supabase) {
+    const { data } = await supabase
+      .from('embroidery_designs')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(4);
+
+    if (data) trendingDesigns = data;
+  }
+
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
@@ -28,35 +45,75 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Featured / Concept Section */}
-      <section className="py-24 px-4 bg-industrial-light">
+      {/* Trending Archives Section */}
+      <section className="py-24 px-4 bg-industrial-light border-b border-industrial-gray/10">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <h2 className="font-heading font-black text-4xl md:text-5xl uppercase tracking-tighter text-industrial-black">
-                Laboratorio de <span className="text-transparent bg-clip-text bg-gradient-to-r from-industrial-black to-gray-500">Diseño</span>
+
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-8">
+            <div>
+              <h2 className="font-heading font-black text-4xl uppercase tracking-tighter text-industrial-black mb-2">
+                Archivo <span className="text-transparent bg-clip-text bg-gradient-to-r from-industrial-black to-gray-500">Industrial</span>
               </h2>
-              <p className="text-industrial-gray text-lg font-light leading-relaxed">
-                No vendemos ropa. Vendemos la capacidad de materializar lo que tienes en la cabeza. Elige la base, elige el bordado, nosotros lo construimos.
+              <p className="font-mono text-sm text-industrial-gray uppercase tracking-widest">
+                Tendencias Globales / Curaduría Local
               </p>
-              <div className="grid grid-cols-2 gap-8 pt-8 border-t border-industrial-gray/20">
-                <div>
-                  <h3 className="font-bold text-xl mb-2">01. Elige</h3>
-                  <p className="text-sm text-gray-600">Hoodies, Tees y Caps de alto gramaje.</p>
-                </div>
-                <div>
-                  <h3 className="font-bold text-xl mb-2">02. Configura</h3>
-                  <p className="text-sm text-gray-600">Visualiza tu diseño en tiempo real.</p>
-                </div>
-              </div>
             </div>
-            <div className="aspect-square bg-industrial-gray rounded-sm overflow-hidden relative">
-              {/* Concept Image Placeholder */}
-              <div className="absolute inset-0 flex items-center justify-center text-gray-700 font-mono text-xs uppercase tracking-widest">
-                [Imagen de Concepto]
-              </div>
-            </div>
+
+            <Link
+              href="/designs"
+              className="group flex items-center gap-2 font-bold uppercase tracking-widest text-xs hover:text-industrial-warning transition-colors"
+            >
+              Ver Librería Completa
+              <span className="group-hover:translate-x-1 transition-transform">→</span>
+            </Link>
           </div>
+
+          {trendingDesigns.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {trendingDesigns.map((design) => (
+                <Link
+                  key={design.id}
+                  href={`/studio?design=${design.id}`}
+                  className="group block relative bg-white border border-transparent hover:border-industrial-gray/20 hover:shadow-xl transition-all duration-500"
+                >
+                  <div className="aspect-[4/5] relative overflow-hidden bg-gray-50">
+                    {design.image_url ? (
+                      <Image
+                        src={design.image_url}
+                        alt={design.name}
+                        fill
+                        className="object-contain p-6 group-hover:scale-110 transition-transform duration-700 mix-blend-multiply"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300 font-mono text-[10px]">NO IMAGE</div>
+                    )}
+
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-industrial-black/0 group-hover:bg-industrial-black/5 transition-colors" />
+
+                    <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-300 bg-white/90 backdrop-blur-sm border-t border-gray-100">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-industrial-black block text-center">
+                        Personalizar
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-4 text-center">
+                    <h3 className="font-bold text-xs uppercase tracking-tight group-hover:text-industrial-warning transition-colors">
+                      {design.name}
+                    </h3>
+                    <p className="text-[10px] text-gray-400 font-mono mt-1 uppercase">
+                      {design.category}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-20 border border-dashed border-gray-300 rounded-sm">
+              <p className="font-mono text-industrial-gray">Cargando archivo...</p>
+            </div>
+          )}
+
         </div>
       </section>
     </div>
