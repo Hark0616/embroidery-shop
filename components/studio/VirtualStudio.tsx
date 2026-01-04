@@ -134,8 +134,8 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         <div
             onClick={() => setActiveStep(step)}
             className={`flex items-center justify-between p-4 border rounded-sm cursor-pointer transition-all mb-4 ${activeStep === step
-                    ? 'border-industrial-black bg-industrial-black text-white'
-                    : 'border-industrial-gray/20 bg-white hover:border-industrial-gray'
+                ? 'border-industrial-black bg-industrial-black text-white'
+                : 'border-industrial-gray/20 bg-white hover:border-industrial-gray'
                 }`}
         >
             <span className="font-heading font-bold uppercase tracking-widest text-sm">
@@ -198,13 +198,37 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
                 {(selectedProduct || activeStep === 'design') && (
                     activeStep === 'design' ? (
                         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                            <OptionSelector
-                                label="2. Elige tu Diseño"
-                                items={designOptions}
-                                selectedId={selectedDesign?.id || null}
-                                onSelect={handleDesignSelect}
-                                type="grid"
-                            />
+                            {/* Featured subset (optional, or just the link) */}
+                            <div className="bg-gray-50 border border-industrial-gray/10 p-6 text-center rounded-sm">
+                                <p className="font-mono text-xs text-industrial-gray mb-4 uppercase tracking-widest">
+                                    +500 Diseños Disponibles
+                                </p>
+                                <button
+                                    onClick={() => router.push(`/designs?product=${selectedProduct?.slug || ''}`)}
+                                    className="inline-flex items-center gap-2 bg-industrial-black text-white px-6 py-3 font-bold uppercase tracking-widest text-xs hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                                >
+                                    <span>🔍</span> Explorar Librería Completa
+                                </button>
+                            </div>
+
+                            {/* Show selected design mini-card if one is picked */}
+                            {selectedDesign && (
+                                <div className="mt-4 border border-industrial-black bg-white p-3 flex items-center gap-4">
+                                    <div className="relative w-12 h-12 bg-gray-100 shrink-0">
+                                        {selectedDesign.image_url && <img src={selectedDesign.image_url} alt={selectedDesign.name} className="object-contain p-1 w-full h-full" />}
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-xs uppercase">{selectedDesign.name}</p>
+                                        <p className="text-[10px] text-gray-400 font-mono">Seleccionado</p>
+                                    </div>
+                                    <button
+                                        onClick={() => router.push(`/designs?product=${selectedProduct?.slug || ''}`)}
+                                        className="ml-auto text-[10px] underline text-industrial-gray hover:text-black"
+                                    >
+                                        Cambiar
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         renderStepHeader('design', `2. Diseño: ${selectedDesign?.name || 'Seleccionar'}`, !!selectedDesign)
