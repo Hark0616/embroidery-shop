@@ -70,7 +70,7 @@ export default async function Home() {
 
           {trendingDesigns.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {trendingDesigns.map((design) => (
+              {trendingDesigns.map((design, index) => (
                 <Link
                   key={design.id}
                   href={`/studio?design=${design.id}`}
@@ -82,6 +82,8 @@ export default async function Home() {
                         src={design.image_url}
                         alt={design.name}
                         fill
+                        priority={index < 2}
+                        sizes="(max-width: 768px) 50vw, 25vw"
                         className="object-contain p-6 group-hover:scale-110 transition-transform duration-700 mix-blend-multiply"
                       />
                     ) : (
