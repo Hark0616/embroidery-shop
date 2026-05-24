@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EmbroideryDesign } from '@/lib/types/database';
+import { applyMoodTheme } from '@/lib/theme';
 
 // Mood → Categories mapping (must match homepage)
 const MOOD_MAP: Record<string, string[]> = {
@@ -41,10 +42,13 @@ export default function DesignBrowser({ designs, categories }: DesignBrowserProp
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Sync mood from URL
+    // Sync mood from URL and apply theme
     useEffect(() => {
         if (moodParam && MOOD_MAP[moodParam]) {
             setActiveMood(moodParam);
+            applyMoodTheme(moodParam);
+        } else {
+            applyMoodTheme(null);
         }
     }, [moodParam]);
 
@@ -87,6 +91,7 @@ export default function DesignBrowser({ designs, categories }: DesignBrowserProp
 
     const clearMood = () => {
         setActiveMood(null);
+        applyMoodTheme(null);
         const params = new URLSearchParams(searchParams.toString());
         params.delete('mood');
         const newUrl = params.toString() ? `/designs?${params.toString()}` : '/designs';

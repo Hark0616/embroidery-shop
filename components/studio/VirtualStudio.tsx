@@ -8,6 +8,7 @@ import { buildWhatsAppMessage } from '@/lib/whatsapp';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import { applyMoodTheme } from '@/lib/theme';
 
 interface VirtualStudioProps {
     products: BaseProduct[];
@@ -60,6 +61,19 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
             }
         }
     }, [selectedProduct, selectedColor, selectedSize]);
+
+    // Sync theme accent color with selected design category or custom upload
+    useEffect(() => {
+        if (isCustomUpload) {
+            applyMoodTheme('tierno'); // Warm/gold accent for custom designs
+        } else if (selectedDesign) {
+            applyMoodTheme(selectedDesign.category);
+        } else {
+            // If in studio but no design selected, check URL mood parameter or fall back
+            const urlMood = searchParams.get('mood');
+            applyMoodTheme(urlMood || null);
+        }
+    }, [selectedDesign, isCustomUpload, searchParams]);
 
     const updateUrl = (key: 'product' | 'design', value: string) => {
         const params = new URLSearchParams(searchParams.toString());

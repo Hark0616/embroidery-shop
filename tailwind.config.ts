@@ -13,7 +13,7 @@ const config: Config = {
           gray: '#171717',
           light: '#f5f5f5',
           white: '#ffffff',
-          warning: '#EAB308', // Yellow-500
+          warning: 'var(--theme-accent, #EAB308)', // Dynamic brand/mood color
           text: '#ffffff',
           'text-muted': '#a3a3a3', // Neutral-400
         },
