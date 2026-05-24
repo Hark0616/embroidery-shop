@@ -296,7 +296,7 @@ Hola, quiero ordenar este bordado personalizado.`;
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start min-h-[calc(100vh-64px)] p-4 md:p-8">
 
             {/* LEFT: Visualizer */}
-            <div className="order-1 lg:order-1 lg:col-span-7 h-[100vh] lg:h-auto">
+            <div className="order-1 lg:order-1 lg:col-span-7 h-[50vh] md:h-[60vh] lg:h-auto w-full aspect-[4/5] lg:aspect-auto">
                 <Visualizer
                     productImage={currentBaseImage}
                     textureMapImage={selectedProduct?.texture_map_url}
