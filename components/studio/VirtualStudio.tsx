@@ -282,6 +282,9 @@ Hola, quiero ordenar este bordado personalizado.`;
                     positionX={displayX}
                     positionY={displayY}
                     designScale={displayScale}
+                    rotation={activePlacementConfig?.rotateZ ?? 0}
+                    rotateX={activePlacementConfig?.rotateX ?? 0}
+                    rotateY={activePlacementConfig?.rotateY ?? 0}
                     isAdminMode={false}
                 />
             </div>

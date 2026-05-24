@@ -17,7 +17,9 @@ interface VisualizerProps {
     positionX?: number; // 0-100
     positionY?: number; // 0-100
     designScale?: number; // 0-100
-    rotation?: number;
+    rotation?: number; // rotateZ
+    rotateX?: number;
+    rotateY?: number;
     
     // Admin Mode
     isAdminMode?: boolean;
@@ -35,6 +37,8 @@ export default function Visualizer({
     positionY = 35,
     designScale = 25,
     rotation = 0,
+    rotateX = 0,
+    rotateY = 0,
     isAdminMode = false,
     onAdminUpdate
 }: VisualizerProps) {
@@ -45,19 +49,15 @@ export default function Visualizer({
     const handleDragEnd = (event: any, info: any) => {
         if (!isAdminMode || !onAdminUpdate || !containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
-        // Calculate new X and Y percentages based on pointer position relative to container
         const rawX = ((info.point.x - rect.left) / rect.width) * 100;
         const rawY = ((info.point.y - rect.top) / rect.height) * 100;
-        
-        // Clamp between 0 and 100
         const newX = Math.max(0, Math.min(100, rawX));
         const newY = Math.max(0, Math.min(100, rawY));
-        
         onAdminUpdate(Number(newX.toFixed(1)), Number(newY.toFixed(1)));
     };
 
     return (
-        <div className="relative sticky top-24">
+        <div className="relative sticky top-24" style={{ perspective: '1000px' }}>
             <EmbroideryFilters />
             
             {/* Main Visualizer Container */}
@@ -65,7 +65,6 @@ export default function Visualizer({
                 ref={containerRef}
                 className={`relative w-full aspect-[4/5] bg-gray-50 overflow-hidden border border-industrial-gray/10 transition-all duration-500 ${isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
                 onClick={(e) => {
-                    // Prevent zooming if dragging in admin mode
                     if (isAdminMode) return;
                     setIsZoomed(!isZoomed);
                 }}
@@ -99,7 +98,7 @@ export default function Visualizer({
                 </AnimatePresence>
 
                 {/* THE 3-LAYER SANDWICH */}
-                <div className={`absolute inset-0 z-10 flex items-center justify-center transition-transform duration-500 ${isZoomed ? 'scale-150' : 'scale-100'}`}>
+                <div className={`absolute inset-0 z-10 flex items-center justify-center transition-transform duration-500 ${isZoomed ? 'scale-150' : 'scale-100'}`} style={{ transformStyle: 'preserve-3d' }}>
                     
                     {/* LAYER 1: Base Product Image */}
                     <AnimatePresence mode="wait">
@@ -151,7 +150,9 @@ export default function Visualizer({
                                     left: `${positionX}%`,
                                     top: `${positionY}%`,
                                     width: `${designScale}%`,
-                                    rotate: rotation,
+                                    rotateZ: rotation,
+                                    rotateX: rotateX,
+                                    rotateY: rotateY,
                                     x: '-50%',
                                     y: '-50%'
                                 }}

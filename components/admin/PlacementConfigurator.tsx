@@ -18,9 +18,18 @@ export default function PlacementConfigurator({ product }: { product: any }) {
     const [activePlacementId, setActivePlacementId] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     
-    // Temp design for calibration (a visible square or dummy logo)
-    // We'll use a placeholder or a common logo url if available
-    const placeholderDesignUrl = "https://placehold.co/400x400/png?text=LOGO";
+    // Temp design for calibration
+    const placeholderSvg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+            <rect width="100%" height="100%" fill="none" stroke="#FFC107" stroke-width="8" stroke-dasharray="20,20"/>
+            <text x="50%" y="50%" font-family="monospace" font-size="48" font-weight="bold" fill="#FFC107" text-anchor="middle" dominant-baseline="middle">LOGO</text>
+            <circle cx="0" cy="0" r="20" fill="#FFC107" />
+            <circle cx="400" cy="0" r="20" fill="#FFC107" />
+            <circle cx="0" cy="400" r="20" fill="#FFC107" />
+            <circle cx="400" cy="400" r="20" fill="#FFC107" />
+        </svg>
+    `;
+    const placeholderDesignUrl = "data:image/svg+xml;base64," + (typeof window !== 'undefined' ? window.btoa(placeholderSvg) : '');
 
     const handleAddZone = () => {
         const zoneId = prompt("Nombre ID de la zona (ej: 'pecho-centro', 'espalda', 'manga'):");
@@ -37,6 +46,9 @@ export default function PlacementConfigurator({ product }: { product: any }) {
                 x: 50,
                 y: 50,
                 scale: 20,
+                rotateZ: 0,
+                rotateX: 0,
+                rotateY: 0,
                 view: view
             }
         }));
@@ -70,6 +82,17 @@ export default function PlacementConfigurator({ product }: { product: any }) {
             [activePlacementId]: {
                 ...prev[activePlacementId],
                 scale
+            }
+        }));
+    };
+
+    const handleRotationChange = (type: 'rotateZ' | 'rotateX' | 'rotateY', value: number) => {
+        if (!activePlacementId) return;
+        setPlacements(prev => ({
+            ...prev,
+            [activePlacementId]: {
+                ...prev[activePlacementId],
+                [type]: value
             }
         }));
     };
@@ -112,6 +135,9 @@ export default function PlacementConfigurator({ product }: { product: any }) {
                     positionX={activeConfig?.x ?? 50}
                     positionY={activeConfig?.y ?? 50}
                     designScale={activeConfig?.scale ?? 20}
+                    rotation={activeConfig?.rotateZ ?? 0}
+                    rotateX={activeConfig?.rotateX ?? 0}
+                    rotateY={activeConfig?.rotateY ?? 0}
                     isAdminMode={!!activePlacementId}
                     onAdminUpdate={handleAdminUpdate}
                 />
@@ -181,6 +207,42 @@ export default function PlacementConfigurator({ product }: { product: any }) {
                                     onChange={(e) => handleScaleChange(Number(e.target.value))}
                                     className="w-full accent-industrial-black"
                                 />
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4 pt-2 border-t border-industrial-gray/10">
+                                <div>
+                                    <label className="font-mono text-[10px] text-industrial-gray block mb-1">Inclinación Vertical (X)</label>
+                                    <input 
+                                        type="range" 
+                                        min="-60" max="60" 
+                                        value={activeConfig.rotateX || 0} 
+                                        onChange={(e) => handleRotationChange('rotateX', Number(e.target.value))}
+                                        className="w-full accent-industrial-black"
+                                    />
+                                    <div className="text-[10px] font-mono text-center text-gray-400">{activeConfig.rotateX || 0}°</div>
+                                </div>
+                                <div>
+                                    <label className="font-mono text-[10px] text-industrial-gray block mb-1">Inclinación Lateral (Y)</label>
+                                    <input 
+                                        type="range" 
+                                        min="-60" max="60" 
+                                        value={activeConfig.rotateY || 0} 
+                                        onChange={(e) => handleRotationChange('rotateY', Number(e.target.value))}
+                                        className="w-full accent-industrial-black"
+                                    />
+                                    <div className="text-[10px] font-mono text-center text-gray-400">{activeConfig.rotateY || 0}°</div>
+                                </div>
+                                <div>
+                                    <label className="font-mono text-[10px] text-industrial-gray block mb-1">Giro (Z)</label>
+                                    <input 
+                                        type="range" 
+                                        min="-180" max="180" 
+                                        value={activeConfig.rotateZ || 0} 
+                                        onChange={(e) => handleRotationChange('rotateZ', Number(e.target.value))}
+                                        className="w-full accent-industrial-black"
+                                    />
+                                    <div className="text-[10px] font-mono text-center text-gray-400">{activeConfig.rotateZ || 0}°</div>
+                                </div>
                             </div>
                             <p className="font-mono text-[10px] text-industrial-gray mt-2">
                                 * Arrastra el diseño directamente sobre la prenda en el visualizador para ajustar X y Y.
