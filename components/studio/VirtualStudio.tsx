@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { applyMoodTheme } from '@/lib/theme';
 import { getPlacementsForProduct } from '@/lib/placements';
+import { uploadCustomDesign } from '@/lib/supabase/storage';
 
 interface VirtualStudioProps {
     products: BaseProduct[];
@@ -63,6 +64,11 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
     const [customDesignName, setCustomDesignName] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [customPreviewUrl, setCustomPreviewUrl] = useState<string | null>(null);
+    
+    // Background Upload State
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+    const [uploadedLogoUrl, setUploadedLogoUrl] = useState<string | null>(null);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     const placements = useMemo(() => {
         if (selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0) {
@@ -128,7 +134,7 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         }
     };
 
-    const handleCustomFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleCustomFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             const url = URL.createObjectURL(file);
@@ -137,6 +143,23 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
             setIsCustomUpload(true);
             setSelectedDesign(null);
             setActiveStep('details');
+            setUploadError(null);
+            setUploadedLogoUrl(null);
+            
+            setIsUploadingLogo(true);
+            try {
+                const publicUrl = await uploadCustomDesign(file);
+                if (publicUrl) {
+                    setUploadedLogoUrl(publicUrl);
+                } else {
+                    setUploadError('Error al subir el diseño personalizado.');
+                }
+            } catch (err) {
+                console.error(err);
+                setUploadError('Error de red al subir archivo.');
+            } finally {
+                setIsUploadingLogo(false);
+            }
         }
     };
 
@@ -159,7 +182,7 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         if (!selectedProduct) return;
 
         const designName = isCustomUpload
-            ? `Diseño personalizado: ${customDesignName || 'Imagen adjunta'}`
+            ? `Diseño personalizado: ${customDesignName || 'Imagen adjunta'}${uploadedLogoUrl ? ` (Descarga: ${uploadedLogoUrl})` : ''}`
             : selectedDesign?.name || '';
             
         const placementLabel = placements[activePlacement]?.label || 'Por defecto';
@@ -176,10 +199,10 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
 Hola, quiero ordenar este bordado personalizado.`;
 
         const encodedMessage = encodeURIComponent(customMessage);
-        // Replace 573000000000 with actual business number
-        const whatsappUrl = `https://wa.me/573000000000?text=${encodedMessage}`;
+        const phone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '573013732290';
+        const whatsappUrl = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodedMessage}`;
 
-        window.open(whatsappUrl, '_blank');
+        window.location.href = whatsappUrl;
     };
 
     // Derived Visualizer State
@@ -235,7 +258,7 @@ Hola, quiero ordenar este bordado personalizado.`;
         value: t.id
     }));
 
-    const isComplete = handleValidation();
+    const isComplete = handleValidation() && (!isCustomUpload || (!isUploadingLogo && !!uploadedLogoUrl));
 
     const renderStepHeader = (step: StudioStep, label: string, isCompleted: boolean, stepNum: string) => (
         <motion.div
@@ -452,6 +475,13 @@ Hola, quiero ordenar este bordado personalizado.`;
                                             <div className="text-left">
                                                 <p className="font-bold text-xs uppercase tracking-tight">{customDesignName}</p>
                                                 <p className="font-mono text-[10px] text-industrial-gray">Tu diseño personalizado</p>
+                                                {isUploadingLogo ? (
+                                                    <p className="font-mono text-[9px] text-blue-500 animate-pulse mt-0.5">⬆ Subiendo a servidor...</p>
+                                                ) : uploadedLogoUrl ? (
+                                                    <p className="font-mono text-[9px] text-green-600 mt-0.5">✓ Guardado para producción</p>
+                                                ) : uploadError ? (
+                                                    <p className="font-mono text-[9px] text-red-500 mt-0.5">⚠️ {uploadError}</p>
+                                                ) : null}
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -602,15 +632,19 @@ Hola, quiero ordenar este bordado personalizado.`;
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-industrial-gray/10 lg:static lg:border-0 lg:p-0 lg:bg-transparent z-40 mt-4">
                     <button
                         onClick={handleWhatsAppCheckout}
-                        disabled={!isComplete}
-                        className={`w-full font-bold h-14 uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-3 ${isComplete
+                        disabled={!isComplete || isUploadingLogo}
+                        className={`w-full font-bold h-14 uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-3 ${isComplete && !isUploadingLogo
                             ? 'bg-industrial-warning hover:bg-industrial-black hover:text-white text-industrial-black animate-pulse-glow shadow-xl hover:-translate-y-1'
                             : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             }`}
                     >
                         <span className="text-xl">💬</span>
                         <span className="text-sm">
-                            {isComplete ? 'Enviar Ficha a Producción' : 'Completa tu selección'}
+                            {isUploadingLogo 
+                                ? 'Subiendo tu logo...' 
+                                : isComplete 
+                                    ? 'Enviar Ficha a Producción' 
+                                    : 'Completa tu selección'}
                         </span>
                     </button>
                     {isComplete && (
