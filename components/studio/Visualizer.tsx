@@ -24,6 +24,9 @@ interface VisualizerProps {
     // Admin Mode
     isAdminMode?: boolean;
     onAdminUpdate?: (x: number, y: number) => void;
+    
+    // Style
+    threadFilter?: string;
 }
 
 export default function Visualizer({ 
@@ -40,7 +43,8 @@ export default function Visualizer({
     rotateX = 0,
     rotateY = 0,
     isAdminMode = false,
-    onAdminUpdate
+    onAdminUpdate,
+    threadFilter = 'none'
 }: VisualizerProps) {
     const [isZoomed, setIsZoomed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -110,6 +114,7 @@ export default function Visualizer({
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.4 }}
                                 className="absolute inset-0 w-full h-full pointer-events-none"
+                                style={{ transform: 'translateZ(0px)' }}
                             >
                                 <Image
                                     src={productImage}
@@ -142,7 +147,7 @@ export default function Visualizer({
                     <AnimatePresence>
                         {designImage && productImage && (
                             <motion.div
-                                key={designImage}
+                                key={isAdminMode ? `admin-${designImage}-${positionX}-${positionY}` : designImage}
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ 
                                     opacity: 1, 
@@ -154,7 +159,8 @@ export default function Visualizer({
                                     rotateX: rotateX,
                                     rotateY: rotateY,
                                     x: '-50%',
-                                    y: '-50%'
+                                    y: '-50%',
+                                    z: 1
                                 }}
                                 exit={{ opacity: 0, scale: 0.8 }}
                                 transition={{ type: 'spring', damping: 25, stiffness: 120 }}
@@ -165,19 +171,26 @@ export default function Visualizer({
                                 dragMomentum={false}
                                 onDragEnd={handleDragEnd}
                                 style={{
-                                    // Apply SVG Filter for displacement and luster
-                                    filter: textureMapImage ? 'url(#embroidery-stitch)' : 'none'
+                                    transformStyle: 'preserve-3d'
                                 }}
                             >
-                                <Image
-                                    src={designImage}
-                                    alt={designName || 'Design Overlay'}
-                                    fill
-                                    className="object-contain"
-                                    style={{
-                                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15)) drop-shadow(0 1px 2px rgba(0,0,0,0.1))',
+                                <div 
+                                    className="w-full h-full relative" 
+                                    style={{ 
+                                        filter: textureMapImage ? 'url(#embroidery-stitch)' : 'none',
+                                        transformStyle: 'preserve-3d'
                                     }}
-                                />
+                                >
+                                    <Image
+                                        src={designImage}
+                                        alt={designName || 'Design Overlay'}
+                                        fill
+                                        className="object-contain"
+                                        style={{
+                                            filter: `${threadFilter} drop-shadow(0 2px 4px rgba(0,0,0,0.15)) drop-shadow(0 1px 2px rgba(0,0,0,0.1))`,
+                                        }}
+                                    />
+                                </div>
                                 {isAdminMode && (
                                     <div className="absolute inset-0 border border-dashed border-industrial-warning pointer-events-none">
                                         <div className="absolute -top-1 -left-1 w-2 h-2 bg-industrial-warning" />
@@ -200,6 +213,7 @@ export default function Visualizer({
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.4 }}
                                 className="absolute inset-0 w-full h-full pointer-events-none mix-blend-multiply opacity-80 z-30"
+                                style={{ transform: 'translateZ(2px)' }}
                             >
                                 <Image
                                     src={textureMapImage}
