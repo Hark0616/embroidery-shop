@@ -85,7 +85,8 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
                 setActivePlacement(firstPlacementKey);
             }
         }
-    }, [selectedProduct, selectedColor, selectedSize, placements]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedProduct]);
 
     // Sync theme accent color
     useEffect(() => {
