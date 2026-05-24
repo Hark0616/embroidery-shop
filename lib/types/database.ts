@@ -116,6 +116,9 @@ export interface Database {
           sizes: string[]
           stock_status: string
           image_url: string
+          back_image_url: string | null
+          texture_map_url: string | null
+          color_images: Json | null
           is_active: boolean
           created_at: string
           updated_at: string
@@ -129,6 +132,9 @@ export interface Database {
           sizes: string[]
           stock_status: string
           image_url: string
+          back_image_url?: string | null
+          texture_map_url?: string | null
+          color_images?: Json | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -142,6 +148,9 @@ export interface Database {
           sizes?: string[]
           stock_status?: string
           image_url?: string
+          back_image_url?: string | null
+          texture_map_url?: string | null
+          color_images?: Json | null
           is_active?: boolean
           created_at?: string
           updated_at?: string

@@ -2,30 +2,77 @@
 
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import EmbroideryFilters from './EmbroideryFilters';
 
 interface VisualizerProps {
     productImage?: string | null;
+    textureMapImage?: string | null;
     designImage?: string | null;
     isLoading?: boolean;
     productName?: string;
     designName?: string;
+    
+    // Placement
+    positionX?: number; // 0-100
+    positionY?: number; // 0-100
+    designScale?: number; // 0-100
+    rotation?: number;
+    
+    // Admin Mode
+    isAdminMode?: boolean;
+    onAdminUpdate?: (x: number, y: number) => void;
 }
 
-export default function Visualizer({ productImage, designImage, isLoading = false, productName, designName }: VisualizerProps) {
+export default function Visualizer({ 
+    productImage, 
+    textureMapImage,
+    designImage, 
+    isLoading = false, 
+    productName, 
+    designName,
+    positionX = 50,
+    positionY = 35,
+    designScale = 25,
+    rotation = 0,
+    isAdminMode = false,
+    onAdminUpdate
+}: VisualizerProps) {
     const [isZoomed, setIsZoomed] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // If dragging in admin mode, calculate percentages
+    const handleDragEnd = (event: any, info: any) => {
+        if (!isAdminMode || !onAdminUpdate || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        // Calculate new X and Y percentages based on pointer position relative to container
+        const rawX = ((info.point.x - rect.left) / rect.width) * 100;
+        const rawY = ((info.point.y - rect.top) / rect.height) * 100;
+        
+        // Clamp between 0 and 100
+        const newX = Math.max(0, Math.min(100, rawX));
+        const newY = Math.max(0, Math.min(100, rawY));
+        
+        onAdminUpdate(Number(newX.toFixed(1)), Number(newY.toFixed(1)));
+    };
 
     return (
-        <div className="relative">
-            {/* Main Visualizer */}
+        <div className="relative sticky top-24">
+            <EmbroideryFilters />
+            
+            {/* Main Visualizer Container */}
             <div
-                className={`relative w-full aspect-[4/5] bg-gray-50 overflow-hidden border border-industrial-gray/10 transition-all duration-500 ${isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
-                    }`}
-                onClick={() => setIsZoomed(!isZoomed)}
+                ref={containerRef}
+                className={`relative w-full aspect-[4/5] bg-gray-50 overflow-hidden border border-industrial-gray/10 transition-all duration-500 ${isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+                onClick={(e) => {
+                    // Prevent zooming if dragging in admin mode
+                    if (isAdminMode) return;
+                    setIsZoomed(!isZoomed);
+                }}
             >
                 {/* Background pattern */}
                 <div
-                    className="absolute inset-0 opacity-[0.04]"
+                    className="absolute inset-0 opacity-[0.04] pointer-events-none"
                     style={{
                         backgroundImage: 'radial-gradient(#000 1px, transparent 1px)',
                         backgroundSize: '16px 16px',
@@ -39,7 +86,7 @@ export default function Visualizer({ productImage, designImage, isLoading = fals
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="absolute inset-0 flex items-center justify-center bg-gray-50 z-50"
+                            className="absolute inset-0 flex items-center justify-center bg-gray-50 z-50 pointer-events-none"
                         >
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-8 h-8 border-2 border-industrial-black border-t-transparent rounded-full animate-spin" />
@@ -51,17 +98,19 @@ export default function Visualizer({ productImage, designImage, isLoading = fals
                     ) : null}
                 </AnimatePresence>
 
-                {/* Base Product Layer */}
+                {/* THE 3-LAYER SANDWICH */}
                 <div className={`absolute inset-0 z-10 flex items-center justify-center transition-transform duration-500 ${isZoomed ? 'scale-150' : 'scale-100'}`}>
+                    
+                    {/* LAYER 1: Base Product Image */}
                     <AnimatePresence mode="wait">
                         {productImage ? (
                             <motion.div
-                                key={productImage}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
+                                key={`base-${productImage}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
                                 transition={{ duration: 0.4 }}
-                                className="relative w-full h-full"
+                                className="absolute inset-0 w-full h-full pointer-events-none"
                             >
                                 <Image
                                     src={productImage}
@@ -76,9 +125,8 @@ export default function Visualizer({ productImage, designImage, isLoading = fals
                                 key="placeholder"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="flex flex-col items-center justify-center gap-4 text-center px-8"
+                                className="flex flex-col items-center justify-center gap-4 text-center px-8 w-full h-full pointer-events-none"
                             >
-                                {/* Animated placeholder */}
                                 <div className="relative w-24 h-28 border-2 border-dashed border-industrial-gray/20 flex items-center justify-center animate-float">
                                     <span className="text-3xl">👕</span>
                                 </div>
@@ -86,27 +134,40 @@ export default function Visualizer({ productImage, designImage, isLoading = fals
                                     <p className="text-industrial-gray font-mono text-xs uppercase tracking-widest mb-1">
                                         Selecciona una prenda
                                     </p>
-                                    <p className="text-industrial-gray/50 font-mono text-[10px]">
-                                        Tu lienzo personalizable
-                                    </p>
                                 </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
-                </div>
 
-                {/* Design Layer (Overlay) with embroidery effect */}
-                <AnimatePresence>
-                    {designImage && productImage && (
-                        <motion.div
-                            key={designImage}
-                            initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
-                            transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-                            className={`absolute inset-0 z-20 pointer-events-none flex items-center justify-center transition-transform duration-500 ${isZoomed ? 'scale-150' : 'scale-100'}`}
-                        >
-                            <div className="relative w-[35%] aspect-square embroidery-texture">
+                    {/* LAYER 2: Embroidery Design */}
+                    <AnimatePresence>
+                        {designImage && productImage && (
+                            <motion.div
+                                key={designImage}
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ 
+                                    opacity: 1, 
+                                    scale: 1,
+                                    left: `${positionX}%`,
+                                    top: `${positionY}%`,
+                                    width: `${designScale}%`,
+                                    rotate: rotation,
+                                    x: '-50%',
+                                    y: '-50%'
+                                }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+                                className={`absolute z-20 aspect-square ${isAdminMode ? 'cursor-move touch-none' : 'pointer-events-none'}`}
+                                drag={isAdminMode}
+                                dragConstraints={containerRef}
+                                dragElastic={0}
+                                dragMomentum={false}
+                                onDragEnd={handleDragEnd}
+                                style={{
+                                    // Apply SVG Filter for displacement and luster
+                                    filter: textureMapImage ? 'url(#embroidery-stitch)' : 'none'
+                                }}
+                            >
                                 <Image
                                     src={designImage}
                                     alt={designName || 'Design Overlay'}
@@ -116,31 +177,63 @@ export default function Visualizer({ productImage, designImage, isLoading = fals
                                         filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15)) drop-shadow(0 1px 2px rgba(0,0,0,0.1))',
                                     }}
                                 />
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                                {isAdminMode && (
+                                    <div className="absolute inset-0 border border-dashed border-industrial-warning pointer-events-none">
+                                        <div className="absolute -top-1 -left-1 w-2 h-2 bg-industrial-warning" />
+                                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-industrial-warning" />
+                                        <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-industrial-warning" />
+                                        <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-industrial-warning" />
+                                    </div>
+                                )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                {/* Corner decorations */}
-                <div className="absolute top-3 left-3 w-4 h-4 border-t border-l border-industrial-gray/15 z-30 pointer-events-none" />
-                <div className="absolute top-3 right-3 w-4 h-4 border-t border-r border-industrial-gray/15 z-30 pointer-events-none" />
-                <div className="absolute bottom-3 left-3 w-4 h-4 border-b border-l border-industrial-gray/15 z-30 pointer-events-none" />
-                <div className="absolute bottom-3 right-3 w-4 h-4 border-b border-r border-industrial-gray/15 z-30 pointer-events-none" />
+                    {/* LAYER 3: Shadow & Highlight Overlay (Multiply Blend Mode) */}
+                    <AnimatePresence>
+                        {productImage && textureMapImage && (
+                            <motion.div
+                                key={`shadow-${textureMapImage}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.4 }}
+                                className="absolute inset-0 w-full h-full pointer-events-none mix-blend-multiply opacity-80 z-30"
+                            >
+                                <Image
+                                    src={textureMapImage}
+                                    alt="Shadow Map"
+                                    fill
+                                    className="object-contain"
+                                    priority
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
 
-                {/* Zoom indicator */}
-                <div className="absolute top-4 right-4 z-30 pointer-events-none">
-                    <span className="font-mono text-[9px] text-industrial-gray/40 uppercase tracking-widest">
+                {/* UI Overlays */}
+                <div className="absolute top-3 left-3 w-4 h-4 border-t border-l border-industrial-gray/15 z-40 pointer-events-none" />
+                <div className="absolute top-3 right-3 w-4 h-4 border-t border-r border-industrial-gray/15 z-40 pointer-events-none" />
+                <div className="absolute bottom-3 left-3 w-4 h-4 border-b border-l border-industrial-gray/15 z-40 pointer-events-none" />
+                <div className="absolute bottom-3 right-3 w-4 h-4 border-b border-r border-industrial-gray/15 z-40 pointer-events-none" />
+
+                <div className="absolute top-4 right-4 z-40 pointer-events-none">
+                    <span className="font-mono text-[9px] text-industrial-gray/40 uppercase tracking-widest bg-white/80 px-2 py-1 backdrop-blur">
                         {isZoomed ? '⊖ Zoom out' : '⊕ Zoom in'}
                     </span>
                 </div>
 
-                {/* Version tag */}
-                <div className="absolute bottom-4 left-4 z-30 font-mono text-[9px] text-industrial-gray/30 uppercase tracking-widest pointer-events-none">
-                    Studio v2.0
-                </div>
+                {isAdminMode && (
+                    <div className="absolute top-4 left-4 z-40 pointer-events-none">
+                        <span className="font-mono text-[9px] font-bold text-red-500 uppercase tracking-widest bg-white/90 px-2 py-1 backdrop-blur border border-red-500/20">
+                            ⚙️ ADMIN CALIBRATION
+                        </span>
+                    </div>
+                )}
             </div>
 
-            {/* Status bar below visualizer */}
+            {/* Status bar */}
             <div className="flex items-center justify-between mt-3 px-1">
                 <div className="flex items-center gap-4">
                     {productImage && (
@@ -160,7 +253,7 @@ export default function Visualizer({ productImage, designImage, isLoading = fals
                         </div>
                     )}
                 </div>
-                {productImage && designImage && (
+                {productImage && designImage && !isAdminMode && (
                     <span className="font-mono text-[10px] text-green-600 uppercase tracking-widest">
                         ✓ Preview listo
                     </span>
