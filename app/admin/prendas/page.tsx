@@ -40,6 +40,7 @@ export default async function PrendasPage() {
               <th className="px-6 py-4 font-normal">Precio Base</th>
               <th className="px-6 py-4 font-normal">Variantes</th>
               <th className="px-6 py-4 font-normal text-center">Status</th>
+              <th className="px-6 py-4 font-normal text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-industrial-gray/10">
@@ -78,6 +79,11 @@ export default async function PrendasPage() {
                     }`}>
                     {product.stock_status}
                   </span>
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <a href={`/admin/prendas/${product.id}`} className="text-industrial-black font-bold uppercase tracking-widest text-xs hover:underline">
+                    ⚙️ Configurar Zonas
+                  </a>
                 </td>
               </tr>
             ))}

@@ -34,7 +34,6 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
     const initialProductSlug = searchParams.get('product');
     const initialDesignId = searchParams.get('design');
     const isCustomMode = searchParams.get('custom') === 'true';
-    const isAdminMode = searchParams.get('admin') === 'true';
 
     const [selectedProduct, setSelectedProduct] = useState<BaseProduct | null>(
         products.find(p => p.slug === initialProductSlug) || null
@@ -57,10 +56,6 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
     
     // Placement State
     const [activePlacement, setActivePlacement] = useState<string>('default');
-    
-    // Admin Override State
-    const [adminX, setAdminX] = useState<number | null>(null);
-    const [adminY, setAdminY] = useState<number | null>(null);
 
     const [showDesignGallery, setShowDesignGallery] = useState(false);
     const [designSearch, setDesignSearch] = useState('');
@@ -69,7 +64,12 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [customPreviewUrl, setCustomPreviewUrl] = useState<string | null>(null);
 
-    const placements = useMemo(() => getPlacementsForProduct(selectedProduct?.slug || ''), [selectedProduct]);
+    const placements = useMemo(() => {
+        if (selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0) {
+            return selectedProduct.placements as Record<string, any>;
+        }
+        return getPlacementsForProduct(selectedProduct?.slug || '');
+    }, [selectedProduct]);
 
     // Reset color/size/placement when product changes
     useEffect(() => {
@@ -83,8 +83,6 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
             const firstPlacementKey = Object.keys(placements)[0];
             if (firstPlacementKey) {
                 setActivePlacement(firstPlacementKey);
-                setAdminX(null); // Reset admin overrides
-                setAdminY(null);
             }
         }
     }, [selectedProduct, selectedColor, selectedSize, placements]);
@@ -185,8 +183,8 @@ Hola, quiero ordenar este bordado personalizado.`;
 
     // Derived Visualizer State
     const activePlacementConfig = placements[activePlacement];
-    const displayX = adminX ?? activePlacementConfig?.x ?? 50;
-    const displayY = adminY ?? activePlacementConfig?.y ?? 35;
+    const displayX = activePlacementConfig?.x ?? 50;
+    const displayY = activePlacementConfig?.y ?? 35;
     const displayScale = activePlacementConfig?.scale ?? 25;
     const isBackView = activePlacementConfig?.view === 'back';
 
@@ -284,37 +282,8 @@ Hola, quiero ordenar este bordado personalizado.`;
                     positionX={displayX}
                     positionY={displayY}
                     designScale={displayScale}
-                    isAdminMode={isAdminMode}
-                    onAdminUpdate={(x, y) => {
-                        setAdminX(x);
-                        setAdminY(y);
-                    }}
+                    isAdminMode={false}
                 />
-                
-                {/* Admin Readout */}
-                {isAdminMode && (
-                    <div className="mt-4 p-4 bg-industrial-black text-white font-mono text-xs rounded shadow-lg overflow-x-auto">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-industrial-warning font-bold">Admin JSON Coords</span>
-                            <button 
-                                onClick={() => {
-                                    const json = JSON.stringify({
-                                        x: displayX,
-                                        y: displayY,
-                                        scale: displayScale,
-                                        view: isBackView ? 'back' : 'front'
-                                    }, null, 2);
-                                    navigator.clipboard.writeText(json);
-                                    alert('Copiado al portapapeles');
-                                }}
-                                className="px-2 py-1 bg-white/10 hover:bg-white/20 transition-colors"
-                            >
-                                Copiar
-                            </button>
-                        </div>
-                        <pre>{JSON.stringify({ x: displayX, y: displayY, scale: displayScale, view: isBackView ? 'back' : 'front' }, null, 2)}</pre>
-                    </div>
-                )}
             </div>
 
             {/* RIGHT: Controls */}
@@ -590,8 +559,6 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     selectedId={activePlacement}
                                     onSelect={(id) => {
                                         setActivePlacement(id);
-                                        setAdminX(null); // Clear override
-                                        setAdminY(null);
                                     }}
                                     type="list"
                                 />
