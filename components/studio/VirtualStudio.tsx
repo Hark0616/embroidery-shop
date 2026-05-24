@@ -286,6 +286,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                     rotateX={activePlacementConfig?.rotateX ?? 0}
                     rotateY={activePlacementConfig?.rotateY ?? 0}
                     isAdminMode={false}
+                    threadFilter={THREAD_COLORS.find(t => t.id === selectedThread)?.css || 'none'}
                 />
             </div>
 
