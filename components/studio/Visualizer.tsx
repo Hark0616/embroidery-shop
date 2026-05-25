@@ -102,7 +102,7 @@ export default function Visualizer({
                 </AnimatePresence>
 
                 {/* THE 3-LAYER SANDWICH */}
-                <div className={`absolute inset-0 z-10 flex items-center justify-center transition-transform duration-500 ${isZoomed ? 'scale-150' : 'scale-100'}`} style={{ transformStyle: 'preserve-3d' }}>
+                <div className={`absolute inset-0 z-10 flex items-center justify-center transition-transform duration-500 ${isZoomed ? 'scale-150' : 'scale-100'}`}>
                     
                     {/* LAYER 1: Base Product Image */}
                     <AnimatePresence mode="wait">
@@ -114,7 +114,6 @@ export default function Visualizer({
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.4 }}
                                 className="absolute inset-0 w-full h-full pointer-events-none"
-                                style={{ transform: 'translateZ(0px)' }}
                             >
                                 <Image
                                     src={productImage}
@@ -143,65 +142,66 @@ export default function Visualizer({
                         )}
                     </AnimatePresence>
 
-                    {/* LAYER 2: Embroidery Design */}
-                    <AnimatePresence>
-                        {designImage && productImage && (
-                            <motion.div
-                                key={isAdminMode ? `admin-${designImage}-${positionX}-${positionY}` : designImage}
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ 
-                                    opacity: 1, 
-                                    scale: 1,
-                                    left: `${positionX}%`,
-                                    top: `${positionY}%`,
-                                    width: `${designScale}%`,
-                                    rotateZ: rotation,
-                                    rotateX: rotateX,
-                                    rotateY: rotateY,
-                                    x: '-50%',
-                                    y: '-50%',
-                                    z: 1
-                                }}
-                                exit={{ opacity: 0, scale: 0.8 }}
-                                transition={{ type: 'spring', damping: 25, stiffness: 120 }}
-                                className={`absolute z-20 aspect-square ${isAdminMode ? 'cursor-move touch-none' : 'pointer-events-none'}`}
-                                drag={isAdminMode}
-                                dragConstraints={containerRef}
-                                dragElastic={0}
-                                dragMomentum={false}
-                                onDragEnd={handleDragEnd}
-                                style={{
-                                    transformStyle: 'preserve-3d'
-                                }}
-                            >
-                                <div 
-                                    className="w-full h-full relative" 
-                                    style={{ 
-                                        filter: textureMapImage ? 'url(#embroidery-stitch)' : 'none',
+                    {/* LAYER 2: Embroidery Design Container */}
+                    <div className="absolute inset-0 pointer-events-none" style={{ perspective: '1000px' }}>
+                        <AnimatePresence>
+                            {designImage && productImage && (
+                                <motion.div
+                                    key={isAdminMode ? `admin-${designImage}-${positionX}-${positionY}` : designImage}
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ 
+                                        opacity: 1, 
+                                        scale: 1,
+                                        left: `${positionX}%`,
+                                        top: `${positionY}%`,
+                                        width: `${designScale}%`,
+                                        rotateZ: rotation,
+                                        rotateX: rotateX,
+                                        rotateY: rotateY,
+                                        x: '-50%',
+                                        y: '-50%'
+                                    }}
+                                    exit={{ opacity: 0, scale: 0.8 }}
+                                    transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+                                    className={`absolute z-20 aspect-square ${isAdminMode ? 'cursor-move touch-none' : 'pointer-events-none'}`}
+                                    drag={isAdminMode}
+                                    dragConstraints={containerRef}
+                                    dragElastic={0}
+                                    dragMomentum={false}
+                                    onDragEnd={handleDragEnd}
+                                    style={{
                                         transformStyle: 'preserve-3d'
                                     }}
                                 >
-                                    <Image
-                                        src={designImage}
-                                        alt={designName || 'Design Overlay'}
-                                        fill
-                                        className="object-contain"
-                                        style={{
-                                            filter: `${threadFilter} drop-shadow(0 2px 4px rgba(0,0,0,0.15)) drop-shadow(0 1px 2px rgba(0,0,0,0.1))`,
+                                    <div 
+                                        className="w-full h-full relative" 
+                                        style={{ 
+                                            filter: textureMapImage ? 'url(#embroidery-stitch)' : 'none',
+                                            transformStyle: 'preserve-3d'
                                         }}
-                                    />
-                                </div>
-                                {isAdminMode && (
-                                    <div className="absolute inset-0 border border-dashed border-industrial-warning pointer-events-none">
-                                        <div className="absolute -top-1 -left-1 w-2 h-2 bg-industrial-warning" />
-                                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-industrial-warning" />
-                                        <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-industrial-warning" />
-                                        <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-industrial-warning" />
+                                    >
+                                        <Image
+                                            src={designImage}
+                                            alt={designName || 'Design Overlay'}
+                                            fill
+                                            className="object-contain"
+                                            style={{
+                                                filter: `${threadFilter} drop-shadow(0 2px 4px rgba(0,0,0,0.15)) drop-shadow(0 1px 2px rgba(0,0,0,0.1))`,
+                                            }}
+                                        />
                                     </div>
-                                )}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                                    {isAdminMode && (
+                                        <div className="absolute inset-0 border border-dashed border-industrial-warning pointer-events-none">
+                                            <div className="absolute -top-1 -left-1 w-2 h-2 bg-industrial-warning" />
+                                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-industrial-warning" />
+                                            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-industrial-warning" />
+                                            <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-industrial-warning" />
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
 
                     {/* LAYER 3: Shadow & Highlight Overlay (Multiply Blend Mode) */}
                     <AnimatePresence>
@@ -213,7 +213,6 @@ export default function Visualizer({
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.4 }}
                                 className="absolute inset-0 w-full h-full pointer-events-none mix-blend-multiply opacity-80 z-30"
-                                style={{ transform: 'translateZ(2px)' }}
                             >
                                 <Image
                                     src={textureMapImage}
