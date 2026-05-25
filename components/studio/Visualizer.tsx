@@ -27,6 +27,7 @@ interface VisualizerProps {
     
     // Style
     threadFilter?: string;
+    placementId?: string;
 }
 
 export default function Visualizer({ 
@@ -44,7 +45,8 @@ export default function Visualizer({
     rotateY = 0,
     isAdminMode = false,
     onAdminUpdate,
-    threadFilter = 'none'
+    threadFilter = 'none',
+    placementId
 }: VisualizerProps) {
     const [isZoomed, setIsZoomed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -153,7 +155,7 @@ export default function Visualizer({
                         <AnimatePresence>
                             {designImage && productImage && (
                                 <motion.div
-                                    key={isAdminMode ? `admin-${designImage}-${positionX}-${positionY}` : designImage}
+                                    key={isAdminMode ? `admin-${placementId || 'default'}` : designImage}
                                     initial={{ opacity: 0, scale: 0.8 }}
                                     animate={{ 
                                         opacity: 1, 
@@ -191,6 +193,7 @@ export default function Visualizer({
                                             alt={designName || 'Design Overlay'}
                                             fill
                                             className="object-contain"
+                                            draggable={false}
                                             style={{
                                                 filter: `${threadFilter} drop-shadow(0 2px 4px rgba(0,0,0,0.15)) drop-shadow(0 1px 2px rgba(0,0,0,0.1))`,
                                             }}

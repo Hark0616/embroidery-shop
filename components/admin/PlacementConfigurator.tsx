@@ -140,6 +140,7 @@ export default function PlacementConfigurator({ product }: { product: any }) {
                     rotateY={activeConfig?.rotateY ?? 0}
                     isAdminMode={!!activePlacementId}
                     onAdminUpdate={handleAdminUpdate}
+                    placementId={activePlacementId}
                 />
             </div>
             
