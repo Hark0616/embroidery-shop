@@ -67,7 +67,13 @@ export default function Visualizer({
             {/* Main Visualizer Container */}
             <div
                 ref={containerRef}
-                className={`relative w-full aspect-[4/5] bg-gray-50 overflow-hidden border border-industrial-gray/10 transition-all duration-500 ${isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+                className={`relative w-full aspect-[4/5] bg-gray-50 overflow-hidden border border-industrial-gray/10 transition-all duration-500 ${
+                    isAdminMode 
+                        ? 'cursor-default' 
+                        : isZoomed 
+                            ? 'cursor-zoom-out' 
+                            : 'cursor-zoom-in'
+                }`}
                 onClick={(e) => {
                     if (isAdminMode) return;
                     setIsZoomed(!isZoomed);
@@ -163,7 +169,7 @@ export default function Visualizer({
                                     }}
                                     exit={{ opacity: 0, scale: 0.8 }}
                                     transition={{ type: 'spring', damping: 25, stiffness: 120 }}
-                                    className={`absolute z-20 aspect-square ${isAdminMode ? 'cursor-move touch-none' : 'pointer-events-none'}`}
+                                    className={`absolute z-20 aspect-square ${isAdminMode ? 'cursor-move touch-none pointer-events-auto' : 'pointer-events-none'}`}
                                     drag={isAdminMode}
                                     dragConstraints={containerRef}
                                     dragElastic={0}
