@@ -155,6 +155,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [isZoomed, setIsZoomed] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(true)
+  const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 })
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
 
@@ -207,23 +208,25 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const activeSurface = activeId ? surfaces[activeId] : null
   const normalizedActive = activeSurface ? normalizeSurface(activeSurface, DEFAULT_GRID_SIZE) : null
 
-  const meshCenter = useMemo(() => {
-    if (!normalizedActive || !normalizedActive.meshPoints || normalizedActive.meshPoints.length === 0) {
-      return { x: 50, y: 50 }
+  // Stable zoom origin to prevent cursor feedback loop when dragging points while zoomed in
+  useEffect(() => {
+    if (normalizedActive) {
+      const pts = normalizedActive.meshPoints
+      if (pts && pts.length > 0) {
+        let minX = 100, maxX = 0, minY = 100, maxY = 0
+        pts.forEach(p => {
+          if (p.x < minX) minX = p.x
+          if (p.x > maxX) maxX = p.x
+          if (p.y < minY) minY = p.y
+          if (p.y > maxY) maxY = p.y
+        })
+        setZoomOrigin({
+          x: (minX + maxX) / 2,
+          y: (minY + maxY) / 2
+        })
+      }
     }
-    const pts = normalizedActive.meshPoints
-    let minX = 100, maxX = 0, minY = 100, maxY = 0
-    pts.forEach(p => {
-      if (p.x < minX) minX = p.x
-      if (p.x > maxX) maxX = p.x
-      if (p.y < minY) minY = p.y
-      if (p.y > maxY) maxY = p.y
-    })
-    return {
-      x: (minX + maxX) / 2,
-      y: (minY + maxY) / 2
-    }
-  }, [normalizedActive])
+  }, [activeId, isZoomed])
 
   const presetSurfaces = useMemo(
     () => getPresetGroup(mockup.base_products?.product_type),
@@ -289,8 +292,8 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
     if (isZoomed) {
       const S = 2.2
-      const Ox = meshCenter.x
-      const Oy = meshCenter.y
+      const Ox = zoomOrigin.x
+      const Oy = zoomOrigin.y
       targetX = Ox + (newPoint.x - Ox) / S
       targetY = Oy + (newPoint.y - Oy) / S
     }
@@ -642,7 +645,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               className="absolute inset-0 w-full h-full"
               style={{
                 transform: isZoomed ? 'scale(2.2)' : 'scale(1)',
-                transformOrigin: isZoomed ? `${meshCenter.x}% ${meshCenter.y}%` : 'center',
+                transformOrigin: isZoomed ? `${zoomOrigin.x}% ${zoomOrigin.y}%` : 'center',
                 transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform-origin 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
