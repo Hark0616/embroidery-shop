@@ -2,8 +2,13 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createMockup } from '@/lib/actions/mockups'
 
-export default async function NewMockupPage() {
+export default async function NewMockupPage({
+  searchParams,
+}: {
+  searchParams?: { product_id?: string }
+}) {
   const supabase = await createClient()
+  const selectedProductId = searchParams?.product_id || ''
   const { data: products } = await supabase
     ?.from('base_products')
     .select('id, name, slug, colors')
@@ -33,6 +38,7 @@ export default async function NewMockupPage() {
             <select
               name="product_id"
               required
+              defaultValue={selectedProductId}
               className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
             >
               <option value="">Seleccionar...</option>
