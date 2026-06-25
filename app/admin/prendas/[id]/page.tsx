@@ -476,6 +476,25 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                     </section>
                 </main>
             </div>
+            <script dangerouslySetInnerHTML={{ __html: `
+                const detailsForm = document.querySelector('input[name="colors"]')?.closest('form');
+                if (detailsForm) {
+                    detailsForm.addEventListener('submit', function(e) {
+                        const colors = detailsForm.querySelectorAll('input[name="colors"]:checked');
+                        const sizes = detailsForm.querySelectorAll('input[name="sizes"]:checked');
+                        if (colors.length === 0) {
+                            alert('Debes seleccionar al menos un color.');
+                            e.preventDefault();
+                            return false;
+                        }
+                        if (sizes.length === 0) {
+                            alert('Debes seleccionar al menos una talla.');
+                            e.preventDefault();
+                            return false;
+                        }
+                    });
+                }
+            ` }} />
         </div>
     );
 }

@@ -31,6 +31,13 @@ export async function createProduct(formData: FormData) {
   const stockStatus = formData.get('stock_status') as string
   const file = formData.get('image') as File
 
+  if (colors.length === 0) {
+    throw new Error('Debes seleccionar al menos un color.')
+  }
+  if (sizes.length === 0) {
+    throw new Error('Debes seleccionar al menos una talla.')
+  }
+
   if (!file || file.size === 0) {
     throw new Error('Image is required')
   }
@@ -146,6 +153,13 @@ export async function updateProductDetails(formData: FormData) {
 
   const colors = formData.getAll('colors') as string[]
   const sizes = formData.getAll('sizes') as string[]
+
+  if (colors.length === 0) {
+    throw new Error('Debes seleccionar al menos un color.')
+  }
+  if (sizes.length === 0) {
+    throw new Error('Debes seleccionar al menos una talla.')
+  }
 
   if (!productId || !name || !slug) {
     throw new Error('Missing required fields')

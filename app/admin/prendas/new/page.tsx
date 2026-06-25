@@ -158,6 +158,22 @@ export default async function NewProductPage() {
                     </div>
                 </form>
             </div>
+            <script dangerouslySetInnerHTML={{ __html: `
+                document.querySelector('form').addEventListener('submit', function(e) {
+                    const colors = document.querySelectorAll('input[name="colors"]:checked');
+                    const sizes = document.querySelectorAll('input[name="sizes"]:checked');
+                    if (colors.length === 0) {
+                        alert('Debes seleccionar al menos un color para el producto.');
+                        e.preventDefault();
+                        return false;
+                    }
+                    if (sizes.length === 0) {
+                        alert('Debes seleccionar al menos una talla para el producto.');
+                        e.preventDefault();
+                        return false;
+                    }
+                });
+            ` }} />
         </div>
     )
 }
