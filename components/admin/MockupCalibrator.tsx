@@ -1,22 +1,37 @@
 'use client'
 
 import Image from 'next/image'
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useMemo, useRef, useState, useTransition } from 'react'
 import { updateMockupCalibration } from '@/lib/actions/mockups'
 import type { CalibrationPoint, CalibrationSurface, EmbroideryDesign, GarmentMockup } from '@/lib/types/database'
-import QuadWarpOverlay from '@/components/studio/QuadWarpOverlay'
+import MeshWarpOverlay from '@/components/studio/MeshWarpOverlay'
+import {
+  createMeshSurface,
+  getCornerIndices,
+  getPointRole,
+  indexToRowCol,
+  normalizeSurface,
+  reinterpolateFromCorners,
+} from '@/lib/mesh-utils'
 
 type SurfaceMap = Record<string, CalibrationSurface>
-type CornerKey = keyof CalibrationSurface['points']
+type EditMode = 'corners' | 'grid' | 'preview'
 
-const CORNERS: Array<{ key: CornerKey; label: string }> = [
-  { key: 'topLeft', label: 'Superior izquierda' },
-  { key: 'topRight', label: 'Superior derecha' },
-  { key: 'bottomRight', label: 'Inferior derecha' },
-  { key: 'bottomLeft', label: 'Inferior izquierda' },
+const DEFAULT_GRID_SIZE = 5
+
+const GRID_SIZE_OPTIONS = [
+  { value: 3, label: '3×3', description: 'Rápido' },
+  { value: 5, label: '5×5', description: 'Recomendado' },
+  { value: 7, label: '7×7', description: 'Alta precisión' },
 ]
 
-const SIZE_LABELS = {
+const BLEND_OPTIONS: Array<{ value: CalibrationSurface['blendMode']; label: string }> = [
+  { value: 'multiply', label: 'Multiply' },
+  { value: 'overlay', label: 'Overlay' },
+  { value: 'normal', label: 'Normal' },
+]
+
+const SIZE_LABELS: Record<string, string> = {
   small: 'Pequeño',
   medium: 'Mediano',
   large: 'Grande',
@@ -45,42 +60,12 @@ const SURFACE_PRESETS: Record<string, Array<{ id: string; label: string; size: C
   ],
 }
 
-function createSurface(
-  id: string,
-  label: string,
-  view: CalibrationSurface['view'],
-  size: CalibrationSurface['size'] = 'medium',
-): CalibrationSurface {
-  return {
-    id,
-    label,
-    type: 'quad',
-    view,
-    size,
-    points: {
-      topLeft: { x: 36, y: 30 },
-      topRight: { x: 64, y: 30 },
-      bottomRight: { x: 64, y: 55 },
-      bottomLeft: { x: 36, y: 55 },
-    },
-    opacity: 0.94,
-    blendMode: 'multiply',
-  }
-}
-
 function getPresetGroup(productType?: string | null) {
   const normalized = (productType || '').toLowerCase()
-
   if (normalized.includes('gorra') || normalized.includes('cap')) return SURFACE_PRESETS.gorra
   if (normalized.includes('hoodie')) return SURFACE_PRESETS.hoodie
   if (normalized.includes('tote') || normalized.includes('bolso')) return SURFACE_PRESETS.tote
-
   return SURFACE_PRESETS.apparel
-}
-
-function surfaceToPolygon(surface: CalibrationSurface) {
-  const { topLeft, topRight, bottomRight, bottomLeft } = surface.points
-  return `${topLeft.x}% ${topLeft.y}%, ${topRight.x}% ${topRight.y}%, ${bottomRight.x}% ${bottomRight.y}%, ${bottomLeft.x}% ${bottomLeft.y}%`
 }
 
 function normalizeId(value: string) {
@@ -91,6 +76,43 @@ function normalizeId(value: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
+
+// ─── Undo/Redo ─────────────────────────────────────────────────
+
+type HistoryEntry = { surfaces: SurfaceMap; activeId: string }
+const MAX_HISTORY = 30
+
+function useHistory(initial: HistoryEntry) {
+  const [past, setPast] = useState<HistoryEntry[]>([])
+  const [present, setPresent] = useState<HistoryEntry>(initial)
+  const [future, setFuture] = useState<HistoryEntry[]>([])
+
+  const push = useCallback((entry: HistoryEntry) => {
+    setPast(p => [...p.slice(-(MAX_HISTORY - 1)), present])
+    setPresent(entry)
+    setFuture([])
+  }, [present])
+
+  const undo = useCallback(() => {
+    if (past.length === 0) return
+    const previous = past[past.length - 1]
+    setPast(p => p.slice(0, -1))
+    setFuture(f => [present, ...f])
+    setPresent(previous)
+  }, [past, present])
+
+  const redo = useCallback(() => {
+    if (future.length === 0) return
+    const next = future[0]
+    setFuture(f => f.slice(1))
+    setPast(p => [...p, present])
+    setPresent(next)
+  }, [future, present])
+
+  return { state: present, push, undo, redo, canUndo: past.length > 0, canRedo: future.length > 0 }
+}
+
+// ─── Component ─────────────────────────────────────────────────
 
 interface MockupCalibratorProps {
   mockup: GarmentMockup & {
@@ -104,84 +126,198 @@ interface MockupCalibratorProps {
 }
 
 export default function MockupCalibrator({ mockup, designs }: MockupCalibratorProps) {
-  const initialSurfaces = (mockup.surfaces && typeof mockup.surfaces === 'object' && !Array.isArray(mockup.surfaces)
-    ? mockup.surfaces
-    : {}) as SurfaceMap
+  // Normalize existing surfaces to mesh format
+  const initialSurfaces = useMemo(() => {
+    const raw = (mockup.surfaces && typeof mockup.surfaces === 'object' && !Array.isArray(mockup.surfaces)
+      ? mockup.surfaces
+      : {}) as SurfaceMap
 
-  const [surfaces, setSurfaces] = useState<SurfaceMap>(initialSurfaces)
-  const [activeId, setActiveId] = useState(Object.keys(initialSurfaces)[0] || '')
+    const normalized: SurfaceMap = {}
+    for (const [key, surface] of Object.entries(raw)) {
+      normalized[key] = normalizeSurface(surface, DEFAULT_GRID_SIZE)
+    }
+    return normalized
+  }, [mockup.surfaces])
+
+  const initialActiveId = Object.keys(initialSurfaces)[0] || ''
+
+  const history = useHistory({ surfaces: initialSurfaces, activeId: initialActiveId })
+  const { surfaces, activeId } = history.state
+
+  const [editMode, setEditMode] = useState<EditMode>('corners')
   const [draftLabel, setDraftLabel] = useState('Pecho centro')
   const [previewDesignId, setPreviewDesignId] = useState(designs[0]?.id || '')
   const [isPublic, setIsPublic] = useState(mockup.is_public)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [shadowIntensity, setShadowIntensity] = useState(70)
   const [saveMessage, setSaveMessage] = useState('')
   const [isPending, startTransition] = useTransition()
+  const [dragPointIndex, setDragPointIndex] = useState<number | null>(null)
+
+  const imageContainerRef = useRef<HTMLDivElement>(null)
 
   const activeSurface = activeId ? surfaces[activeId] : null
+  const normalizedActive = activeSurface ? normalizeSurface(activeSurface, DEFAULT_GRID_SIZE) : null
+
   const presetSurfaces = useMemo(
     () => getPresetGroup(mockup.base_products?.product_type),
     [mockup.base_products?.product_type],
   )
   const previewDesign = useMemo(
-    () => designs.find(design => design.id === previewDesignId) || designs[0],
+    () => designs.find(d => d.id === previewDesignId) || designs[0],
     [designs, previewDesignId],
   )
-
   const canPublish = Object.keys(surfaces).length > 0
+
+  // Which points to show based on edit mode
+  const visiblePointIndices = useMemo(() => {
+    if (!normalizedActive) return []
+    const gs = normalizedActive.gridSize
+    const totalPoints = gs * gs
+    const all = Array.from({ length: totalPoints }, (_, i) => i)
+
+    if (editMode === 'preview') return []
+    if (editMode === 'corners') {
+      return getCornerIndices(gs) as unknown as number[]
+    }
+    return all // grid mode
+  }, [normalizedActive, editMode])
+
+  // ─── Actions ─────────────────────────────────────────────────
+
+  const updateState = (newSurfaces: SurfaceMap, newActiveId?: string) => {
+    history.push({ surfaces: newSurfaces, activeId: newActiveId ?? activeId })
+  }
 
   const addSurface = (label = draftLabel, size: CalibrationSurface['size'] = 'medium') => {
     const id = normalizeId(label || 'zona')
     if (!id) return
-
     const uniqueId = surfaces[id] ? `${id}-${Object.keys(surfaces).length + 1}` : id
-    const next = createSurface(uniqueId, label || uniqueId, mockup.view, size)
-    setSurfaces(prev => ({ ...prev, [uniqueId]: next }))
-    setActiveId(uniqueId)
+    const next = createMeshSurface(uniqueId, label || uniqueId, mockup.view, size, DEFAULT_GRID_SIZE)
+    updateState({ ...surfaces, [uniqueId]: next }, uniqueId)
     setDraftLabel('')
+    setEditMode('corners')
   }
 
   const deleteSurface = (id: string) => {
-    setSurfaces(prev => {
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
-    if (activeId === id) {
-      setActiveId('')
+    const next = { ...surfaces }
+    delete next[id]
+    const newActive = activeId === id ? (Object.keys(next)[0] || '') : activeId
+    updateState(next, newActive)
+  }
+
+  const setActiveId = (id: string) => {
+    history.push({ surfaces, activeId: id })
+  }
+
+  const updateActiveSurface = (updater: (s: CalibrationSurface) => CalibrationSurface) => {
+    if (!activeId || !surfaces[activeId]) return
+    updateState({ ...surfaces, [activeId]: updater(surfaces[activeId]) })
+  }
+
+  const handleMeshPointMove = (pointIndex: number, newPoint: CalibrationPoint) => {
+    if (!normalizedActive || !activeId) return
+
+    const newMeshPoints = [...normalizedActive.meshPoints]
+    newMeshPoints[pointIndex] = {
+      x: Math.max(0, Math.min(100, Number(newPoint.x.toFixed(1)))),
+      y: Math.max(0, Math.min(100, Number(newPoint.y.toFixed(1)))),
+    }
+
+    // Track pinned points (user-moved)
+    const role = getPointRole(pointIndex, normalizedActive.gridSize)
+    let newPinned = [...(normalizedActive.pinnedPoints || [])]
+    if (role !== 'corner' && !newPinned.includes(pointIndex)) {
+      newPinned.push(pointIndex)
+    }
+
+    // In corner mode, re-interpolate non-pinned points
+    if (editMode === 'corners' && role === 'corner') {
+      const interpolated = reinterpolateFromCorners(newMeshPoints, newPinned, normalizedActive.gridSize)
+      updateState({
+        ...surfaces,
+        [activeId]: {
+          ...normalizedActive,
+          meshPoints: interpolated,
+          pinnedPoints: newPinned,
+        },
+      })
+    } else {
+      updateState({
+        ...surfaces,
+        [activeId]: {
+          ...normalizedActive,
+          meshPoints: newMeshPoints,
+          pinnedPoints: newPinned,
+        },
+      })
     }
   }
 
-  const updateSurface = (id: string, updater: (surface: CalibrationSurface) => CalibrationSurface) => {
-    setSurfaces(prev => {
-      const current = prev[id]
-      if (!current) return prev
-      return { ...prev, [id]: updater(current) }
-    })
-  }
-
-  const updatePoint = (corner: CornerKey, point: CalibrationPoint) => {
-    if (!activeId) return
-    updateSurface(activeId, surface => ({
-      ...surface,
-      points: {
-        ...surface.points,
-        [corner]: {
-          x: Math.max(0, Math.min(100, Number(point.x.toFixed(1)))),
-          y: Math.max(0, Math.min(100, Number(point.y.toFixed(1)))),
-        },
+  const handleResetGrid = () => {
+    if (!normalizedActive || !activeId) return
+    const interpolated = reinterpolateFromCorners(normalizedActive.meshPoints, [], normalizedActive.gridSize)
+    updateState({
+      ...surfaces,
+      [activeId]: {
+        ...normalizedActive,
+        meshPoints: interpolated,
+        pinnedPoints: [],
       },
-    }))
-  }
-
-  const handlePointerMove = (corner: CornerKey, event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!(event.buttons & 1)) return
-    const rect = event.currentTarget.parentElement?.getBoundingClientRect()
-    if (!rect) return
-    updatePoint(corner, {
-      x: ((event.clientX - rect.left) / rect.width) * 100,
-      y: ((event.clientY - rect.top) / rect.height) * 100,
     })
   }
+
+  const handleGridSizeChange = (newSize: number) => {
+    if (!normalizedActive || !activeId) return
+    const corners = getCornerIndices(normalizedActive.gridSize)
+    const tl = normalizedActive.meshPoints[corners[0]]
+    const tr = normalizedActive.meshPoints[corners[1]]
+    const bl = normalizedActive.meshPoints[corners[2]]
+    const br = normalizedActive.meshPoints[corners[3]]
+
+    const { createUniformGrid } = require('@/lib/mesh-utils')
+    const newMeshPoints = createUniformGrid(tl, tr, bl, br, newSize)
+
+    updateState({
+      ...surfaces,
+      [activeId]: {
+        ...normalizedActive,
+        gridSize: newSize,
+        meshPoints: newMeshPoints,
+        pinnedPoints: [],
+      },
+    })
+  }
+
+  // ─── Pointer handling ────────────────────────────────────────
+
+  const handlePointerDown = (pointIndex: number, e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragPointIndex(pointIndex)
+    const container = imageContainerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    handleMeshPointMove(pointIndex, {
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    })
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (dragPointIndex === null || !(e.buttons & 1)) return
+    const container = imageContainerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    handleMeshPointMove(dragPointIndex, {
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    })
+  }
+
+  const handlePointerUp = () => {
+    setDragPointIndex(null)
+  }
+
+  // ─── Save ────────────────────────────────────────────────────
 
   const save = (publishOverride?: boolean) => {
     const nextIsPublic = typeof publishOverride === 'boolean' ? publishOverride : isPublic
@@ -197,339 +333,513 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
           status: nextStatus,
           isPublic: nextIsPublic,
         })
-        setSaveMessage(`Guardado como ${result.status}.`)
+        setSaveMessage(`✓ Guardado como ${result.status}.`)
       } catch (error) {
         setSaveMessage(error instanceof Error ? error.message : 'No se pudo guardar.')
       }
     })
   }
 
+  // ─── Render ──────────────────────────────────────────────────
+
+  const getHandleStyle = (role: 'corner' | 'edge' | 'interior', isPinned: boolean) => {
+    if (role === 'corner') return 'h-8 w-8 border-[3px] border-industrial-black bg-yellow-400 shadow-xl z-50 hover:scale-125'
+    if (role === 'edge') return 'h-6 w-6 border-2 border-industrial-black bg-orange-400 shadow-lg z-40 hover:scale-125'
+    return `h-4 w-4 border-2 ${isPinned ? 'border-blue-700 bg-blue-400' : 'border-blue-400 bg-blue-200'} shadow z-30 hover:scale-150`
+  }
+
+  const getHandleLabel = (index: number, gridSize: number) => {
+    const [row, col] = indexToRowCol(index, gridSize)
+    const role = getPointRole(index, gridSize)
+    if (role === 'corner') {
+      if (row === 0 && col === 0) return 'Sup. izquierda'
+      if (row === 0 && col === gridSize - 1) return 'Sup. derecha'
+      if (row === gridSize - 1 && col === 0) return 'Inf. izquierda'
+      return 'Inf. derecha'
+    }
+    return `Punto (${row}, ${col})`
+  }
+
   return (
     <div className="space-y-6">
-      <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      {/* Stepper */}
+      <section className="grid grid-cols-4 gap-3">
         {[
-          ['1', 'Elegir zona', Object.keys(surfaces).length > 0],
-          ['2', 'Ajustar area', !!activeSurface],
-          ['3', 'Probar diseno', !!previewDesign],
-          ['4', 'Publicar', isPublic],
-        ].map(([step, label, done]) => (
-          <div key={step as string} className={`border p-4 bg-white ${done ? 'border-industrial-black' : 'border-industrial-gray/20'}`}>
+          { step: '1', label: 'Elegir zona', done: Object.keys(surfaces).length > 0, detail: `${Object.keys(surfaces).length} zona(s)` },
+          { step: '2', label: 'Ajustar mesh', done: !!normalizedActive, detail: normalizedActive ? `${normalizedActive.gridSize}×${normalizedActive.gridSize} grid` : '' },
+          { step: '3', label: 'Probar diseño', done: !!previewDesign, detail: previewDesign?.name || '' },
+          { step: '4', label: 'Publicar', done: isPublic, detail: isPublic ? 'Público' : 'Privado' },
+        ].map(({ step, label, done, detail }) => (
+          <div key={step} className={`border p-4 bg-white transition-all ${done ? 'border-industrial-black' : 'border-industrial-gray/20'}`}>
             <div className="flex items-center gap-3">
               <span className={`h-7 w-7 flex items-center justify-center border text-[10px] font-bold ${done ? 'bg-industrial-black text-white border-industrial-black' : 'border-industrial-gray/30 text-industrial-gray'}`}>
-                {done ? 'OK' : step}
+                {done ? '✓' : step}
               </span>
-              <span className="font-bold text-xs uppercase tracking-widest">{label}</span>
+              <div>
+                <span className="block font-bold text-xs uppercase tracking-widest">{label}</span>
+                {detail && <span className="block font-mono text-[9px] text-industrial-gray uppercase tracking-widest">{detail}</span>}
+              </div>
             </div>
           </div>
         ))}
       </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)] gap-6">
-      <section className="bg-white border border-industrial-gray/20 p-4">
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-              {mockup.base_products?.name || 'Prenda'} / {mockup.view}
-            </p>
-            <h2 className="font-heading font-black text-2xl uppercase tracking-tighter">
-              {mockup.name}
-            </h2>
+      <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)] gap-6">
+        {/* Left: Image + Overlay */}
+        <section className="bg-white border border-industrial-gray/20 p-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                {mockup.base_products?.name || 'Prenda'} / {mockup.view}
+              </p>
+              <h2 className="font-heading font-black text-2xl uppercase tracking-tighter">
+                {mockup.name}
+              </h2>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Undo/Redo */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={history.undo}
+                  disabled={!history.canUndo}
+                  className="h-8 w-8 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
+                  title="Deshacer (Ctrl+Z)"
+                >
+                  ↩
+                </button>
+                <button
+                  type="button"
+                  onClick={history.redo}
+                  disabled={!history.canRedo}
+                  className="h-8 w-8 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
+                  title="Rehacer"
+                >
+                  ↪
+                </button>
+              </div>
+              {/* Status */}
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${isPublic ? 'bg-green-500' : Object.keys(surfaces).length > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                  {isPublic ? 'Publicado' : Object.keys(surfaces).length > 0 ? 'Calibrado' : 'Pendiente'}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${isPublic ? 'bg-green-500' : Object.keys(surfaces).length > 0 ? 'bg-industrial-warning' : 'bg-gray-300'}`} />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-              {isPublic ? 'Publicado' : Object.keys(surfaces).length > 0 ? 'Calibrado privado' : 'Pendiente'}
-            </span>
+
+          {/* Edit mode tabs */}
+          <div className="flex items-center gap-1 mb-4">
+            {([
+              { mode: 'corners' as EditMode, label: '4 Esquinas', icon: '◇' },
+              { mode: 'grid' as EditMode, label: 'Grid completo', icon: '⊞' },
+              { mode: 'preview' as EditMode, label: 'Preview', icon: '◉' },
+            ]).map(({ mode, label, icon }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setEditMode(mode)}
+                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                  editMode === mode
+                    ? 'bg-industrial-black text-white border-industrial-black'
+                    : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
+                }`}
+              >
+                {icon} {label}
+              </button>
+            ))}
           </div>
-        </div>
 
-        <div className="relative w-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none">
-          <Image
-            src={mockup.image_url}
-            alt={mockup.name}
-            fill
-            priority
-            className="object-contain"
-            draggable={false}
-          />
-
-          {activeSurface && previewDesign?.image_url && (
-            <QuadWarpOverlay imageUrl={previewDesign.image_url} surface={activeSurface} />
-          )}
-
-          {mockup.shadow_map_url && (
+          {/* Image Canvas */}
+          <div
+            ref={imageContainerRef}
+            className="relative w-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none"
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+          >
+            {/* Base mockup image */}
             <Image
-              src={mockup.shadow_map_url}
-              alt=""
+              src={mockup.image_url}
+              alt={mockup.name}
               fill
-              className="object-contain mix-blend-multiply opacity-70 pointer-events-none"
+              priority
+              className="object-contain"
               draggable={false}
             />
-          )}
 
-          {Object.values(surfaces).map(surface => (
-            <div
-              key={surface.id}
-              className={`absolute inset-0 ${surface.id === activeId ? 'z-20' : 'z-10'}`}
-              style={{
-                clipPath: `polygon(${surfaceToPolygon(surface)})`,
-                backgroundColor: surface.id === activeId ? 'rgba(234,179,8,0.14)' : 'rgba(10,10,10,0.06)',
-                border: surface.id === activeId ? '1px solid rgba(234,179,8,0.7)' : '1px solid rgba(10,10,10,0.2)',
-              }}
-            />
-          ))}
-
-          {activeSurface && (
-            <svg className="absolute inset-0 z-30 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <polygon
-                points={Object.values(activeSurface.points).map(point => `${point.x},${point.y}`).join(' ')}
-                fill="none"
-                stroke="#eab308"
-                strokeWidth="0.35"
-                strokeDasharray="1 0.8"
+            {/* Design overlay with mesh warp */}
+            {normalizedActive && previewDesign?.image_url && (
+              <MeshWarpOverlay
+                imageUrl={previewDesign.image_url}
+                gridSize={normalizedActive.gridSize}
+                meshPoints={normalizedActive.meshPoints}
+                opacity={normalizedActive.opacity}
+                blendMode={normalizedActive.blendMode}
               />
-              <line x1={activeSurface.points.topLeft.x} y1={activeSurface.points.topLeft.y} x2={activeSurface.points.bottomRight.x} y2={activeSurface.points.bottomRight.y} stroke="rgba(234,179,8,0.35)" strokeWidth="0.18" />
-              <line x1={activeSurface.points.topRight.x} y1={activeSurface.points.topRight.y} x2={activeSurface.points.bottomLeft.x} y2={activeSurface.points.bottomLeft.y} stroke="rgba(234,179,8,0.35)" strokeWidth="0.18" />
-            </svg>
-          )}
-
-          {activeSurface && CORNERS.map(({ key, label }) => {
-            const point = activeSurface.points[key]
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-label={label}
-                onPointerDown={event => {
-                  event.currentTarget.setPointerCapture(event.pointerId)
-                  handlePointerMove(key, event)
-                }}
-                onPointerMove={event => handlePointerMove(key, event)}
-                className="absolute z-40 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-industrial-black bg-industrial-warning shadow-lg cursor-grab active:cursor-grabbing"
-                style={{ left: `${point.x}%`, top: `${point.y}%` }}
-              />
-            )
-          })}
-        </div>
-      </section>
-
-      <aside className="space-y-4">
-        <section className="bg-white border border-industrial-gray/20 p-5">
-          <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
-            Zonas bordables
-          </h3>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-4">
-            Elige una zona sugerida y ajusta sus esquinas sobre el mockup.
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 mb-5">
-            {presetSurfaces.map(preset => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => addSurface(preset.label, preset.size)}
-                className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50"
-              >
-                <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
-                <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-1">
-                  {SIZE_LABELS[preset.size]}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-2 mb-4 border-t border-industrial-gray/10 pt-4">
-            <input
-              type="text"
-              value={draftLabel}
-              onChange={event => setDraftLabel(event.target.value)}
-              className="min-w-0 flex-1 border border-industrial-gray/20 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
-              placeholder="Pecho centro"
-            />
-            <button
-              type="button"
-              onClick={() => addSurface()}
-              className="bg-industrial-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black"
-            >
-              Agregar
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {Object.values(surfaces).map(surface => (
-              <button
-                key={surface.id}
-                type="button"
-                onClick={() => setActiveId(surface.id)}
-                className={`w-full text-left border p-3 transition-colors ${surface.id === activeId ? 'border-industrial-black bg-gray-50' : 'border-industrial-gray/20 hover:border-industrial-gray/50'}`}
-              >
-                <span className="block font-bold text-xs uppercase tracking-widest">{surface.label}</span>
-                <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {surface.size} / {surface.view}
-                </span>
-              </button>
-            ))}
-            {Object.keys(surfaces).length === 0 && (
-              <div className="border border-dashed border-industrial-gray/20 p-5 text-center font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                Aún no hay zonas calibradas.
-              </div>
             )}
+
+            {/* Shadow map */}
+            {mockup.shadow_map_url && (
+              <Image
+                src={mockup.shadow_map_url}
+                alt=""
+                fill
+                className="object-contain mix-blend-multiply pointer-events-none"
+                style={{ opacity: shadowIntensity / 100 }}
+                draggable={false}
+              />
+            )}
+
+            {/* Grid lines visualization */}
+            {normalizedActive && editMode !== 'preview' && (
+              <svg className="absolute inset-0 z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {/* Draw grid lines */}
+                {Array.from({ length: normalizedActive.gridSize }).map((_, row) => (
+                  Array.from({ length: normalizedActive.gridSize - 1 }).map((_, col) => {
+                    const idx = row * normalizedActive.gridSize + col
+                    const nextIdx = idx + 1
+                    const p1 = normalizedActive.meshPoints[idx]
+                    const p2 = normalizedActive.meshPoints[nextIdx]
+                    return (
+                      <line key={`h-${row}-${col}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                        stroke={editMode === 'corners' ? 'rgba(234,179,8,0.3)' : 'rgba(59,130,246,0.4)'}
+                        strokeWidth="0.2"
+                      />
+                    )
+                  })
+                ))}
+                {Array.from({ length: normalizedActive.gridSize - 1 }).map((_, row) => (
+                  Array.from({ length: normalizedActive.gridSize }).map((_, col) => {
+                    const idx = row * normalizedActive.gridSize + col
+                    const belowIdx = (row + 1) * normalizedActive.gridSize + col
+                    const p1 = normalizedActive.meshPoints[idx]
+                    const p2 = normalizedActive.meshPoints[belowIdx]
+                    return (
+                      <line key={`v-${row}-${col}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                        stroke={editMode === 'corners' ? 'rgba(234,179,8,0.3)' : 'rgba(59,130,246,0.4)'}
+                        strokeWidth="0.2"
+                      />
+                    )
+                  })
+                ))}
+                {/* Outer border */}
+                {(() => {
+                  const gs = normalizedActive.gridSize
+                  const pts = normalizedActive.meshPoints
+                  const topEdge = Array.from({ length: gs }, (_, i) => pts[i])
+                  const rightEdge = Array.from({ length: gs }, (_, i) => pts[i * gs + gs - 1])
+                  const bottomEdge = Array.from({ length: gs }, (_, i) => pts[(gs - 1) * gs + i]).reverse()
+                  const leftEdge = Array.from({ length: gs }, (_, i) => pts[i * gs]).reverse()
+                  const border = [...topEdge, ...rightEdge.slice(1), ...bottomEdge.slice(1), ...leftEdge.slice(1)]
+                  const d = border.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z'
+                  return <path d={d} fill="none" stroke="#eab308" strokeWidth="0.35" strokeDasharray="1 0.8" />
+                })()}
+              </svg>
+            )}
+
+            {/* Inactive surface indicators */}
+            {Object.values(surfaces).filter(s => s.id !== activeId).map(surface => {
+              const norm = normalizeSurface(surface, DEFAULT_GRID_SIZE)
+              const corners = getCornerIndices(norm.gridSize)
+              const pts = corners.map(i => norm.meshPoints[i])
+              return (
+                <svg key={surface.id} className="absolute inset-0 z-10 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <polygon
+                    points={pts.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="rgba(10,10,10,0.06)"
+                    stroke="rgba(10,10,10,0.2)"
+                    strokeWidth="0.3"
+                  />
+                </svg>
+              )
+            })}
+
+            {/* Draggable handles */}
+            {normalizedActive && visiblePointIndices.map(pointIndex => {
+              const point = normalizedActive.meshPoints[pointIndex]
+              const role = getPointRole(pointIndex, normalizedActive.gridSize)
+              const isPinned = normalizedActive.pinnedPoints?.includes(pointIndex) || false
+              const label = getHandleLabel(pointIndex, normalizedActive.gridSize)
+
+              return (
+                <button
+                  key={pointIndex}
+                  type="button"
+                  aria-label={label}
+                  title={label}
+                  onPointerDown={(e) => handlePointerDown(pointIndex, e)}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full cursor-grab active:cursor-grabbing transition-transform ${getHandleStyle(role, isPinned)}`}
+                  style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                />
+              )
+            })}
           </div>
         </section>
 
-        {activeSurface && (
+        {/* Right: Controls */}
+        <aside className="space-y-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 8rem)' }}>
+          {/* Zones panel */}
           <section className="bg-white border border-industrial-gray/20 p-5">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <h3 className="font-heading font-black text-lg uppercase tracking-tighter">
-                  Ajuste fino
-                </h3>
-                <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {activeSurface.label}
-                </p>
-              </div>
+            <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
+              Zonas bordables
+            </h3>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-4">
+              Elige una zona y ajusta el mesh sobre el mockup.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 mb-5">
+              {presetSurfaces.map(preset => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => addSurface(preset.label, preset.size)}
+                  className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                >
+                  <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
+                  <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-1">
+                    {SIZE_LABELS[preset.size]}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mb-4 border-t border-industrial-gray/10 pt-4">
+              <input
+                type="text"
+                value={draftLabel}
+                onChange={e => setDraftLabel(e.target.value)}
+                className="min-w-0 flex-1 border border-industrial-gray/20 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                placeholder="Nombre de zona..."
+              />
               <button
                 type="button"
-                onClick={() => deleteSurface(activeSurface.id)}
-                className="text-red-600 text-[10px] font-bold uppercase tracking-widest hover:underline"
+                onClick={() => addSurface()}
+                className="bg-industrial-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
               >
-                Eliminar
+                Agregar
               </button>
             </div>
 
-            <div className="space-y-4">
-              <label className="block">
-                <span className="block font-bold text-xs uppercase tracking-widest mb-2">Nombre visible</span>
-                <input
-                  type="text"
-                  value={activeSurface.label}
-                  onChange={event => updateSurface(activeSurface.id, surface => ({ ...surface, label: event.target.value }))}
-                  className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-                />
-              </label>
-
-              <label className="block">
-                <span className="block font-bold text-xs uppercase tracking-widest mb-2">Tamaño recomendado</span>
-                <select
-                  value={activeSurface.size}
-                  onChange={event => updateSurface(activeSurface.id, surface => ({ ...surface, size: event.target.value as CalibrationSurface['size'] }))}
-                  className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
+            <div className="space-y-2">
+              {Object.values(surfaces).map(surface => (
+                <button
+                  key={surface.id}
+                  type="button"
+                  onClick={() => setActiveId(surface.id)}
+                  className={`w-full text-left border p-3 transition-colors ${surface.id === activeId ? 'border-industrial-black bg-gray-50' : 'border-industrial-gray/20 hover:border-industrial-gray/50'}`}
                 >
-                  {Object.entries(SIZE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(value => !value)}
-                className="w-full border border-industrial-gray/20 px-3 py-3 text-left font-bold text-[10px] uppercase tracking-widest hover:border-industrial-black"
-              >
-                {showAdvanced ? 'Ocultar ajuste avanzado' : 'Mostrar ajuste avanzado'}
-              </button>
-
-              {showAdvanced && CORNERS.map(({ key, label }) => {
-                const point = activeSurface.points[key]
-                return (
-                  <div key={key} className="grid grid-cols-[1fr_74px_74px] gap-2 items-end">
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray pb-2">
-                      {label}
-                    </span>
-                    <label>
-                      <span className="block font-mono text-[9px] uppercase text-industrial-gray mb-1">X</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={point.x}
-                        onChange={event => updatePoint(key, { x: Number(event.target.value), y: point.y })}
-                        className="w-full border border-industrial-gray/20 px-2 py-2 text-xs font-mono"
-                      />
-                    </label>
-                    <label>
-                      <span className="block font-mono text-[9px] uppercase text-industrial-gray mb-1">Y</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={point.y}
-                        onChange={event => updatePoint(key, { x: point.x, y: Number(event.target.value) })}
-                        className="w-full border border-industrial-gray/20 px-2 py-2 text-xs font-mono"
-                      />
-                    </label>
-                  </div>
-                )
-              })}
+                  <span className="block font-bold text-xs uppercase tracking-widest">{surface.label}</span>
+                  <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                    {surface.size} / {surface.view} / {(surface as any).gridSize || 2}×{(surface as any).gridSize || 2} mesh
+                  </span>
+                </button>
+              ))}
+              {Object.keys(surfaces).length === 0 && (
+                <div className="border border-dashed border-industrial-gray/20 p-5 text-center font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                  Aún no hay zonas calibradas.
+                </div>
+              )}
             </div>
           </section>
-        )}
 
-        <section className="bg-white border border-industrial-gray/20 p-5">
-          <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-4">
-            Prueba y publicación
-          </h3>
+          {/* Fine-tuning panel */}
+          {normalizedActive && (
+            <section className="bg-white border border-industrial-gray/20 p-5">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="font-heading font-black text-lg uppercase tracking-tighter">
+                    Ajuste fino
+                  </h3>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                    {normalizedActive.label}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => deleteSurface(normalizedActive.id)}
+                  className="text-red-600 text-[10px] font-bold uppercase tracking-widest hover:underline"
+                >
+                  Eliminar
+                </button>
+              </div>
 
-          <label className="block mb-4">
-            <span className="block font-bold text-xs uppercase tracking-widest mb-2">Diseño de prueba</span>
-            <select
-              value={previewDesignId}
-              onChange={event => setPreviewDesignId(event.target.value)}
-              className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-            >
-              {designs.map(design => (
-                <option key={design.id} value={design.id}>{design.name}</option>
-              ))}
-            </select>
-          </label>
+              <div className="space-y-5">
+                {/* Name */}
+                <label className="block">
+                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Nombre visible</span>
+                  <input
+                    type="text"
+                    value={normalizedActive.label}
+                    onChange={e => updateActiveSurface(s => ({ ...s, label: e.target.value }))}
+                    className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
+                  />
+                </label>
 
-          <label className="flex items-center justify-between gap-4 border border-industrial-gray/20 p-3 mb-4">
-            <span>
-              <span className="block font-bold text-xs uppercase tracking-widest">Estado publico</span>
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                {isPublic ? 'Visible en el Studio publico.' : 'Privado hasta que lo publiques.'}
+                {/* Grid Resolution */}
+                <div>
+                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Resolución del mesh</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {GRID_SIZE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleGridSizeChange(opt.value)}
+                        className={`border p-3 text-center transition-colors ${
+                          normalizedActive.gridSize === opt.value
+                            ? 'border-industrial-black bg-industrial-black text-white'
+                            : 'border-industrial-gray/20 hover:border-industrial-black'
+                        }`}
+                      >
+                        <span className="block font-bold text-sm">{opt.label}</span>
+                        <span className="block font-mono text-[9px] uppercase tracking-widest text-current opacity-60">{opt.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Size */}
+                <label className="block">
+                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Tamaño recomendado</span>
+                  <select
+                    value={normalizedActive.size}
+                    onChange={e => updateActiveSurface(s => ({ ...s, size: e.target.value as CalibrationSurface['size'] }))}
+                    className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
+                  >
+                    {Object.entries(SIZE_LABELS).map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* Opacity */}
+                <label className="block">
+                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">
+                    Opacidad del diseño — {Math.round((normalizedActive.opacity ?? 0.94) * 100)}%
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={Math.round((normalizedActive.opacity ?? 0.94) * 100)}
+                    onChange={e => updateActiveSurface(s => ({ ...s, opacity: Number(e.target.value) / 100 }))}
+                    className="w-full accent-yellow-500"
+                  />
+                </label>
+
+                {/* Blend Mode */}
+                <div>
+                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Modo de mezcla</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {BLEND_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => updateActiveSurface(s => ({ ...s, blendMode: opt.value }))}
+                        className={`border px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                          (normalizedActive.blendMode || 'multiply') === opt.value
+                            ? 'border-industrial-black bg-industrial-black text-white'
+                            : 'border-industrial-gray/20 hover:border-industrial-black'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Shadow map intensity */}
+                {mockup.shadow_map_url && (
+                  <label className="block">
+                    <span className="block font-bold text-xs uppercase tracking-widest mb-2">
+                      Intensidad de sombras — {shadowIntensity}%
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={shadowIntensity}
+                      onChange={e => setShadowIntensity(Number(e.target.value))}
+                      className="w-full accent-yellow-500"
+                    />
+                  </label>
+                )}
+
+                {/* Reset */}
+                <button
+                  type="button"
+                  onClick={handleResetGrid}
+                  className="w-full border border-industrial-gray/20 px-3 py-3 text-left font-bold text-[10px] uppercase tracking-widest hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                >
+                  ↺ Resetear grid (re-interpolar desde esquinas)
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Test & Publish */}
+          <section className="bg-white border border-industrial-gray/20 p-5">
+            <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-4">
+              Prueba y publicación
+            </h3>
+
+            <label className="block mb-4">
+              <span className="block font-bold text-xs uppercase tracking-widest mb-2">Diseño de prueba</span>
+              <select
+                value={previewDesignId}
+                onChange={e => setPreviewDesignId(e.target.value)}
+                className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
+              >
+                {designs.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-center justify-between gap-4 border border-industrial-gray/20 p-3 mb-4">
+              <span>
+                <span className="block font-bold text-xs uppercase tracking-widest">Estado público</span>
+                <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                  {isPublic ? 'Visible en el Studio público.' : 'Privado hasta que lo publiques.'}
+                </span>
               </span>
-            </span>
-            <span className={`px-2 py-1 border text-[9px] font-bold uppercase tracking-widest ${isPublic ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-50'}`}>
-              {isPublic ? 'Publicado' : 'Privado'}
-            </span>
-          </label>
+              <span className={`px-2 py-1 border text-[9px] font-bold uppercase tracking-widest ${isPublic ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-50'}`}>
+                {isPublic ? 'Publicado' : 'Privado'}
+              </span>
+            </label>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => save(false)}
-              disabled={isPending}
-              className="w-full border border-industrial-gray/30 px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-gray-50 disabled:opacity-50"
-            >
-              {isPending ? 'Guardando...' : 'Guardar privado'}
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => save(false)}
+                disabled={isPending}
+                className="w-full border border-industrial-gray/30 px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                {isPending ? 'Guardando...' : 'Guardar privado'}
+              </button>
+              <button
+                type="button"
+                onClick={() => save(true)}
+                disabled={isPending || !canPublish}
+                className="w-full bg-industrial-warning px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50 transition-colors"
+              >
+                Publicar mockup
+              </button>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => save(true)}
-              disabled={isPending || !canPublish}
-              className="w-full bg-industrial-warning px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50 disabled:hover:bg-industrial-warning disabled:hover:text-industrial-black"
-            >
-              Publicar mockup
-            </button>
-          </div>
+            {!canPublish && (
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-red-600">
+                Crea al menos una zona bordable antes de publicar.
+              </p>
+            )}
 
-          {!canPublish && (
-            <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-red-600">
-              Crea al menos una zona bordable antes de publicar.
-            </p>
-          )}
-
-          {saveMessage && (
-            <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-              {saveMessage}
-            </p>
-          )}
-        </section>
-      </aside>
+            {saveMessage && (
+              <p className={`mt-3 font-mono text-[10px] uppercase tracking-widest ${saveMessage.startsWith('✓') ? 'text-green-600' : 'text-industrial-gray'}`}>
+                {saveMessage}
+              </p>
+            )}
+          </section>
+        </aside>
       </div>
     </div>
   )
