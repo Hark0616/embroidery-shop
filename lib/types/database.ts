@@ -289,18 +289,31 @@ export type CalibrationPoint = {
   y: number
 }
 
+/** Legacy 4-corner quad format (backwards compatibility) */
+export type QuadPoints = {
+  topLeft: CalibrationPoint
+  topRight: CalibrationPoint
+  bottomRight: CalibrationPoint
+  bottomLeft: CalibrationPoint
+}
+
 export type CalibrationSurface = {
   id: string
   label: string
-  type: 'quad'
+  type: 'quad' | 'mesh'
   view: 'front' | 'back' | 'side' | 'detail'
   size: 'small' | 'medium' | 'large'
-  points: {
-    topLeft: CalibrationPoint
-    topRight: CalibrationPoint
-    bottomRight: CalibrationPoint
-    bottomLeft: CalibrationPoint
-  }
+
+  /** Legacy quad points — used when type === 'quad' */
+  points?: QuadPoints
+
+  /** Mesh grid size — e.g. 5 means a 5×5 grid of control points */
+  gridSize?: number
+  /** Flat array of mesh points in row-major order (length = gridSize × gridSize) */
+  meshPoints?: CalibrationPoint[]
+  /** Indices of points manually pinned by the user (won't auto-interpolate) */
+  pinnedPoints?: number[]
+
   opacity?: number
   blendMode?: 'normal' | 'multiply' | 'overlay'
 }
