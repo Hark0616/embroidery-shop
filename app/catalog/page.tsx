@@ -11,7 +11,7 @@ export default async function CatalogPage() {
     if (supabase) {
         const { data, error } = await supabase
             .from('base_products')
-            .select('*')
+            .select('*, garment_mockups(image_url, is_public, status)')
             .eq('is_active', true)
             .order('created_at', { ascending: false });
 
@@ -46,18 +46,27 @@ export default async function CatalogPage() {
                             className="group block border border-transparent hover:border-industrial-gray/20 p-4 transition-all duration-300 bg-white"
                         >
                             <div className="aspect-[4/5] relative bg-gray-100 mb-4 overflow-hidden">
-                                {product.image_url ? (
-                                    <Image
-                                        src={product.image_url}
-                                        alt={product.name}
-                                        fill
-                                        className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                    />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-300 font-mono text-xs">
-                                        NO IMAGE
-                                    </div>
-                                )}
+                                {(() => {
+                                    const publishedMockups = (product.garment_mockups || []).filter(
+                                        (m: any) => m.is_public && m.status === 'published'
+                                    );
+                                    const displayImage = publishedMockups.length > 0
+                                        ? publishedMockups[0].image_url
+                                        : product.image_url;
+
+                                    return displayImage ? (
+                                        <Image
+                                            src={displayImage}
+                                            alt={product.name}
+                                            fill
+                                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-300 font-mono text-xs">
+                                            NO IMAGE
+                                        </div>
+                                    );
+                                })()}
                                 {product.stock_status !== 'available' && (
                                     <div className="absolute top-2 right-2 bg-industrial-black text-industrial-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest">
                                         {product.stock_status === 'out_of_stock' ? 'Agotado' : 'Pre-Order'}
