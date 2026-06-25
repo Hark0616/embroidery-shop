@@ -74,14 +74,41 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
     }, [selectedMockup]);
 
     const placements = useMemo(() => {
-        if (calibratedSurfaces) {
-            return calibratedSurfaces;
+        const allCalibrated: Record<string, any> = {};
+        
+        productMockups.forEach(mockup => {
+            if (
+                mockup.surfaces &&
+                typeof mockup.surfaces === 'object' &&
+                !Array.isArray(mockup.surfaces)
+            ) {
+                const surfaces = mockup.surfaces as Record<string, CalibrationSurface>;
+                Object.entries(surfaces).forEach(([key, surface]) => {
+                    const stdPlacements = product.placements && Object.keys(product.placements).length > 0
+                        ? (product.placements as Record<string, any>)
+                        : getPlacementsForProduct(product.slug || '');
+                        
+                    const stdConfig = stdPlacements[key] || {};
+                    
+                    allCalibrated[key] = {
+                        ...stdConfig,
+                        ...surface,
+                        view: surface.view || stdConfig.view || 'front',
+                        label: surface.label || stdConfig.label || key,
+                    };
+                });
+            }
+        });
+        
+        if (Object.keys(allCalibrated).length > 0) {
+            return allCalibrated;
         }
+
         if (product.placements && Object.keys(product.placements).length > 0) {
             return product.placements as Record<string, any>;
         }
         return getPlacementsForProduct(product.slug || '');
-    }, [calibratedSurfaces, product]);
+    }, [productMockups, product]);
 
     const [activePlacement, setActivePlacement] = useState<string>('default');
 

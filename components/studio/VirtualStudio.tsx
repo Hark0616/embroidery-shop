@@ -102,14 +102,53 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     }, [selectedMockup]);
 
     const placements = useMemo(() => {
-        if (calibratedSurfaces) {
-            return calibratedSurfaces;
+        const allCalibrated: Record<string, any> = {};
+        
+        productMockups.forEach(mockup => {
+            if (
+                mockup.surfaces &&
+                typeof mockup.surfaces === 'object' &&
+                !Array.isArray(mockup.surfaces)
+            ) {
+                const surfaces = mockup.surfaces as Record<string, CalibrationSurface>;
+                Object.entries(surfaces).forEach(([key, surface]) => {
+                    const stdPlacements = selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0
+                        ? (selectedProduct.placements as Record<string, any>)
+                        : getPlacementsForProduct(selectedProduct?.slug || '');
+                        
+                    const stdConfig = stdPlacements[key] || {};
+                    
+                    allCalibrated[key] = {
+                        ...stdConfig,
+                        ...surface,
+                        view: surface.view || stdConfig.view || 'front',
+                        label: surface.label || stdConfig.label || key,
+                    };
+                });
+            }
+        });
+        
+        if (Object.keys(allCalibrated).length > 0) {
+            return allCalibrated;
         }
+
         if (selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0) {
             return selectedProduct.placements as Record<string, any>;
         }
         return getPlacementsForProduct(selectedProduct?.slug || '');
-    }, [calibratedSurfaces, selectedProduct]);
+    }, [productMockups, selectedProduct]);
+
+    // Automatically sync mockup selection with placement view and selected color
+    useEffect(() => {
+        const placementView = placements[activePlacement]?.view || 'front';
+        const matchingMockup = visibleMockups.find(
+            m => m.view === placementView
+        ) || visibleMockups[0];
+        
+        if (matchingMockup) {
+            setSelectedMockupId(matchingMockup.id);
+        }
+    }, [activePlacement, visibleMockups, placements]);
 
     // Reset color/size/placement when product changes
     useEffect(() => {

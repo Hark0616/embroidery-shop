@@ -39,24 +39,24 @@ const SIZE_LABELS: Record<string, string> = {
 
 const SURFACE_PRESETS: Record<string, Array<{ id: string; label: string; size: CalibrationSurface['size'] }>> = {
   apparel: [
-    { id: 'pecho-centro', label: 'Pecho centro', size: 'medium' },
-    { id: 'pecho-izquierdo', label: 'Pecho izquierdo', size: 'small' },
-    { id: 'espalda-centro', label: 'Espalda centro', size: 'large' },
+    { id: 'pecho-centro', label: 'Centro Pecho', size: 'medium' },
+    { id: 'pecho-izquierdo', label: 'Pecho Izquierdo (Logo)', size: 'small' },
+    { id: 'espalda-centro', label: 'Espalda Grande', size: 'large' },
     { id: 'manga', label: 'Manga', size: 'small' },
   ],
   hoodie: [
-    { id: 'pecho-centro', label: 'Pecho centro', size: 'medium' },
-    { id: 'pecho-izquierdo', label: 'Pecho izquierdo', size: 'small' },
-    { id: 'espalda-centro', label: 'Espalda centro', size: 'large' },
+    { id: 'pecho-centro', label: 'Centro Pecho', size: 'medium' },
+    { id: 'pecho-izquierdo', label: 'Pecho Izquierdo (Logo)', size: 'small' },
+    { id: 'espalda-centro', label: 'Espalda Grande', size: 'large' },
     { id: 'manga', label: 'Manga', size: 'small' },
   ],
   gorra: [
-    { id: 'frente-centro', label: 'Frente centro', size: 'small' },
-    { id: 'lateral', label: 'Lateral', size: 'small' },
+    { id: 'frente-centro', label: 'Frente Centro', size: 'small' },
+    { id: 'lateral-izquierdo', label: 'Lateral Izquierdo', size: 'small' },
   ],
   tote: [
     { id: 'centro', label: 'Centro', size: 'large' },
-    { id: 'frente-bajo', label: 'Frente bajo', size: 'medium' },
+    { id: 'frente-bajo', label: 'Frente Bajo', size: 'medium' },
   ],
 }
 
@@ -258,8 +258,8 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     history.push({ surfaces: newSurfaces, activeId: newActiveId ?? activeId })
   }
 
-  const addSurface = (label = draftLabel, size: CalibrationSurface['size'] = 'medium') => {
-    const id = normalizeId(label || 'zona')
+  const addSurface = (label = draftLabel, size: CalibrationSurface['size'] = 'medium', explicitId?: string) => {
+    const id = explicitId || normalizeId(label || 'zona')
     if (!id) return
     const uniqueId = surfaces[id] ? `${id}-${Object.keys(surfaces).length + 1}` : id
     const next = createMeshSurface(uniqueId, label || uniqueId, mockup.view, size, DEFAULT_GRID_SIZE)
@@ -787,7 +787,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 <button
                   key={preset.id}
                   type="button"
-                  onClick={() => addSurface(preset.label, preset.size)}
+                  onClick={() => addSurface(preset.label, preset.size, preset.id)}
                   className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
                 >
                   <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
