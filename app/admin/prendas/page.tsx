@@ -14,15 +14,7 @@ type ProductWithMockups = BaseProduct & {
   garment_mockups?: MockupSummary[]
 }
 
-const PRODUCT_TYPE_LABELS: Record<string, string> = {
-  camiseta: 'Camiseta',
-  hoodie: 'Hoodie',
-  gorra: 'Gorra',
-  blusa: 'Blusa',
-  tote: 'Tote / Bolso',
-  apparel: 'Ropa / General',
-  otro: 'Otro',
-}
+
 
 function getSurfaceCount(mockup: MockupSummary) {
   if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
@@ -129,7 +121,7 @@ export default async function PrendasPage() {
               <th className="px-6 py-4 font-normal">Imagen</th>
               <th className="px-6 py-4 font-normal">Producto</th>
               <th className="px-6 py-4 font-normal">Precio Base</th>
-              <th className="px-6 py-4 font-normal">Tipo</th>
+
               <th className="px-6 py-4 font-normal">Variantes</th>
               <th className="px-6 py-4 font-normal">Mockups</th>
               <th className="px-6 py-4 font-normal text-center">Publicación</th>
@@ -164,11 +156,7 @@ export default async function PrendasPage() {
                   <td className="px-6 py-4 font-mono text-sm text-industrial-black">
                     ${product.base_price?.toLocaleString()}
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-block px-2 py-1 bg-gray-100 text-xs font-mono uppercase tracking-wide text-gray-600">
-                      {PRODUCT_TYPE_LABELS[product.product_type || ''] || product.product_type || 'sin tipo'}
-                    </span>
-                  </td>
+
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
                       {product.colors?.map((c: string) => (

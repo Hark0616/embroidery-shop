@@ -65,15 +65,6 @@ function getProductReadiness(product: BaseProduct, mockups: GarmentMockup[]) {
     };
 }
 
-const PRODUCT_TYPE_LABELS: Record<string, string> = {
-    camiseta: 'Camiseta',
-    hoodie: 'Hoodie',
-    gorra: 'Gorra',
-    blusa: 'Blusa',
-    tote: 'Tote / Bolso',
-    apparel: 'Ropa / General',
-    otro: 'Otro',
-};
 
 export default async function EditPrendaPage({ params }: { params: { id: string } }) {
     const supabase = await createClient();
@@ -139,7 +130,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                             {product.name}
                         </h1>
                         <p className="font-mono text-xs text-industrial-gray mt-2 uppercase tracking-widest">
-                            {product.slug} / {PRODUCT_TYPE_LABELS[product.product_type || ''] || product.product_type || 'sin tipo'}
+                            {product.slug}
                         </p>
                     </div>
                     <div className={`border px-4 py-3 ${readiness.className}`}>
@@ -289,7 +280,8 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input type="hidden" name="product_type" value={product.product_type || 'apparel'} />
                                 <div>
                                     <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
                                         Precio Base ($)
@@ -303,23 +295,6 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                         defaultValue={product.base_price}
                                         className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
-                                        Tipo de Prenda
-                                    </label>
-                                    <select
-                                        name="product_type"
-                                        defaultValue={product.product_type || 'camiseta'}
-                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
-                                    >
-                                        <option value="camiseta">Camiseta</option>
-                                        <option value="hoodie">Hoodie</option>
-                                        <option value="gorra">Gorra</option>
-                                        <option value="blusa">Blusa</option>
-                                        <option value="tote">Tote / Bolso</option>
-                                        <option value="otro">Otro</option>
-                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">

@@ -60,11 +60,15 @@ const SURFACE_PRESETS: Record<string, Array<{ id: string; label: string; size: C
   ],
 }
 
-function getPresetGroup(productType?: string | null) {
-  const normalized = (productType || '').toLowerCase()
-  if (normalized.includes('gorra') || normalized.includes('cap')) return SURFACE_PRESETS.gorra
-  if (normalized.includes('hoodie')) return SURFACE_PRESETS.hoodie
-  if (normalized.includes('tote') || normalized.includes('bolso')) return SURFACE_PRESETS.tote
+function getPresetGroup(productType?: string | null, name?: string | null, slug?: string | null) {
+  const normalizedType = (productType || '').toLowerCase()
+  const normalizedName = (name || '').toLowerCase()
+  const normalizedSlug = (slug || '').toLowerCase()
+  const combined = `${normalizedType} ${normalizedName} ${normalizedSlug}`
+  
+  if (combined.includes('gorra') || combined.includes('cap')) return SURFACE_PRESETS.gorra
+  if (combined.includes('hoodie')) return SURFACE_PRESETS.hoodie
+  if (combined.includes('tote') || combined.includes('bolso')) return SURFACE_PRESETS.tote
   return SURFACE_PRESETS.apparel
 }
 
@@ -229,8 +233,12 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   }, [activeId, isZoomed])
 
   const presetSurfaces = useMemo(
-    () => getPresetGroup(mockup.base_products?.product_type),
-    [mockup.base_products?.product_type],
+    () => getPresetGroup(
+      mockup.base_products?.product_type,
+      mockup.base_products?.name,
+      mockup.base_products?.slug
+    ),
+    [mockup.base_products?.product_type, mockup.base_products?.name, mockup.base_products?.slug],
   )
   const previewDesign = useMemo(
     () => designs.find(d => d.id === previewDesignId) || designs[0],
