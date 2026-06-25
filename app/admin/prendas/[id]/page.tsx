@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BaseProduct, GarmentMockup } from '@/lib/types/database';
-import { updateProductPublication, deleteProductAction } from '@/lib/actions/products';
+import { updateProductPublication, deleteProductAction, updateProductDetails } from '@/lib/actions/products';
 import { deleteMockupAction } from '@/lib/actions/mockups';
 import DeleteButton from '@/components/admin/DeleteButton';
 
@@ -170,9 +170,9 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
             <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
                 <aside className="space-y-6">
                     <section className="bg-white border border-industrial-gray/20 p-5">
-                        <div className="aspect-[4/5] bg-gray-100 border border-industrial-gray/10 overflow-hidden mb-5">
+                        <div className="aspect-[4/5] max-w-[240px] mx-auto bg-gray-100 border border-industrial-gray/10 overflow-hidden mb-5">
                             {displayImage ? (
-                                <img src={displayImage} alt={product.name} className="w-full h-full object-cover" />
+                                <img src={displayImage} alt={product.name} className="w-full h-full object-contain" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300 font-mono text-xs">
                                     SIN IMAGEN
@@ -221,6 +221,127 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                 </aside>
 
                 <main className="space-y-6">
+                    <section className="bg-white border border-industrial-gray/20 p-6">
+                        <h2 className="font-heading font-black text-xl uppercase tracking-tighter text-industrial-black mb-4">
+                            Editar Detalles de la Prenda
+                        </h2>
+                        <form action={updateProductDetails} className="space-y-4">
+                            <input type="hidden" name="product_id" value={product.id} />
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Nombre del Producto
+                                    </label>
+                                    <input
+                                        name="name"
+                                        type="text"
+                                        required
+                                        defaultValue={product.name}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Slug (URL)
+                                    </label>
+                                    <input
+                                        name="slug"
+                                        type="text"
+                                        required
+                                        defaultValue={product.slug}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Precio Base ($)
+                                    </label>
+                                    <input
+                                        name="base_price"
+                                        type="number"
+                                        required
+                                        min="0"
+                                        step="0.01"
+                                        defaultValue={product.base_price}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Tipo de Prenda
+                                    </label>
+                                    <select
+                                        name="product_type"
+                                        defaultValue={product.product_type || 'camiseta'}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    >
+                                        <option value="camiseta">Camiseta</option>
+                                        <option value="hoodie">Hoodie</option>
+                                        <option value="gorra">Gorra</option>
+                                        <option value="blusa">Blusa</option>
+                                        <option value="tote">Tote / Bolso</option>
+                                        <option value="otro">Otro</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Estado de Stock
+                                    </label>
+                                    <select
+                                        name="stock_status"
+                                        defaultValue={product.stock_status || 'available'}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    >
+                                        <option value="available">Disponible</option>
+                                        <option value="out_of_stock">Agotado</option>
+                                        <option value="pre_order">Pre-orden</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Colores (separados por coma)
+                                    </label>
+                                    <input
+                                        name="colors"
+                                        type="text"
+                                        defaultValue={product.colors?.join(', ')}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                        placeholder="Negro, Blanco, Gris..."
+                                    />
+                                    <p className="text-[9px] text-gray-500 mt-1">Escribe los colores tal como se llamarán en tus variantes.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Tallas (separadas por coma)
+                                    </label>
+                                    <input
+                                        name="sizes"
+                                        type="text"
+                                        defaultValue={product.sizes?.join(', ')}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                        placeholder="S, M, L, XL"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="pt-2">
+                                <button
+                                    type="submit"
+                                    className="px-5 py-3 bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                                >
+                                    Guardar Detalles
+                                </button>
+                            </div>
+                        </form>
+                    </section>
+
                     <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="bg-white border border-industrial-gray/20 p-5">
                             <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">Mockups</p>

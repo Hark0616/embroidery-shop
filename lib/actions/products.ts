@@ -128,3 +128,57 @@ export async function deleteProductAction(formData: FormData) {
   revalidatePath('/admin/prendas')
   redirect('/admin/prendas')
 }
+
+export async function updateProductDetails(formData: FormData) {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
+  const productId = formData.get('product_id') as string
+  const name = formData.get('name') as string
+  const slug = formData.get('slug') as string
+  const productType = formData.get('product_type') as string
+  const basePrice = parseFloat(formData.get('base_price') as string)
+  const stockStatus = formData.get('stock_status') as string
+
+  const colorsRaw = formData.get('colors') as string
+  const sizesRaw = formData.get('sizes') as string
+
+  // Parse comma-separated text into arrays
+  const colors = colorsRaw
+    ? colorsRaw.split(',').map(c => c.trim()).filter(Boolean)
+    : []
+  const sizes = sizesRaw
+    ? sizesRaw.split(',').map(s => s.trim()).filter(Boolean)
+    : []
+
+  if (!productId || !name || !slug) {
+    throw new Error('Missing required fields')
+  }
+
+  const { error: updateError } = await supabase
+    .from('base_products')
+    .update({
+      name,
+      slug,
+      product_type: productType,
+      base_price: basePrice,
+      colors,
+      sizes,
+      stock_status: stockStatus,
+    })
+    .eq('id', productId)
+
+  if (updateError) {
+    console.error('Error updating product details:', updateError)
+    throw new Error('Failed to update product details')
+  }
+
+  revalidatePath('/admin/prendas')
+  revalidatePath(`/admin/prendas/${productId}`)
+  revalidatePath('/catalog')
+  revalidatePath('/studio')
+}
