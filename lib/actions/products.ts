@@ -144,16 +144,8 @@ export async function updateProductDetails(formData: FormData) {
   const basePrice = parseFloat(formData.get('base_price') as string)
   const stockStatus = formData.get('stock_status') as string
 
-  const colorsRaw = formData.get('colors') as string
-  const sizesRaw = formData.get('sizes') as string
-
-  // Parse comma-separated text into arrays
-  const colors = colorsRaw
-    ? colorsRaw.split(',').map(c => c.trim()).filter(Boolean)
-    : []
-  const sizes = sizesRaw
-    ? sizesRaw.split(',').map(s => s.trim()).filter(Boolean)
-    : []
+  const colors = formData.getAll('colors') as string[]
+  const sizes = formData.getAll('sizes') as string[]
 
   if (!productId || !name || !slug) {
     throw new Error('Missing required fields')

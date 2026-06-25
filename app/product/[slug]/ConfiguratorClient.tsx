@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Visualizer from '@/components/studio/Visualizer';
 import type { CalibrationSurface, GarmentMockup } from '@/lib/types/database';
 import { getPlacementsForProduct } from '@/lib/placements';
+import { COLOR_MAP } from '@/lib/colors';
 
 interface Product {
     id: string;
@@ -278,18 +279,28 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
                     <div className="mb-10">
                         <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">Color Base</h3>
                         <div className="flex flex-wrap gap-2">
-                            {product.colors.map(color => (
-                                <button
-                                    key={color}
-                                    onClick={() => setSelectedColor(color)}
-                                    className={`px-4 py-2 border text-sm font-bold uppercase transition-all
-                                ${selectedColor === color
-                                            ? 'border-industrial-black bg-industrial-black text-white'
-                                            : 'border-gray-200 text-gray-500 hover:border-industrial-black'}`}
-                                >
-                                    {color}
-                                </button>
-                            ))}
+                            {product.colors.map(color => {
+                                const hex = COLOR_MAP[color];
+                                return (
+                                    <button
+                                        key={color}
+                                        onClick={() => setSelectedColor(color)}
+                                        className={`flex items-center gap-2 px-3 py-2 border text-xs font-mono uppercase tracking-widest transition-all
+                                            ${selectedColor === color
+                                                ? 'border-industrial-black bg-industrial-black text-white'
+                                                : 'border-gray-200 text-gray-500 hover:border-industrial-black bg-white'}`}
+                                        title={color}
+                                    >
+                                        {hex && (
+                                            <span 
+                                                className="w-3.5 h-3.5 rounded-full border border-gray-300 inline-block"
+                                                style={{ backgroundColor: hex }}
+                                            />
+                                        )}
+                                        {color}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 

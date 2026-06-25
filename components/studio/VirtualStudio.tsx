@@ -11,6 +11,7 @@ import Image from 'next/image';
 import { applyMoodTheme } from '@/lib/theme';
 import { getPlacementsForProduct } from '@/lib/placements';
 import { uploadCustomDesign } from '@/lib/supabase/storage';
+import { COLOR_MAP } from '@/lib/colors';
 
 interface VirtualStudioProps {
     products: BaseProduct[];
@@ -353,7 +354,7 @@ Hola, quiero ordenar este bordado personalizado.`;
         id: c,
         name: c,
         value: c,
-        colorHex: c
+        colorHex: COLOR_MAP[c] || c
     })) || [], [selectedProduct]);
 
     const sizeOptions = useMemo(() => selectedProduct?.sizes.map(s => ({

@@ -5,6 +5,7 @@ import type { BaseProduct, GarmentMockup } from '@/lib/types/database';
 import { updateProductPublication, deleteProductAction, updateProductDetails } from '@/lib/actions/products';
 import { deleteMockupAction } from '@/lib/actions/mockups';
 import DeleteButton from '@/components/admin/DeleteButton';
+import { COLOR_DATABASE } from '@/lib/colors';
 
 function getSurfaceCount(mockup: GarmentMockup) {
     if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
@@ -303,31 +304,56 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
-                                        Colores (separados por coma)
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-2">
+                                        Colores disponibles
                                     </label>
-                                    <input
-                                        name="colors"
-                                        type="text"
-                                        defaultValue={product.colors?.join(', ')}
-                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
-                                        placeholder="Negro, Blanco, Gris..."
-                                    />
-                                    <p className="text-[9px] text-gray-500 mt-1">Escribe los colores tal como se llamarán en tus variantes.</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-industrial-light border border-industrial-gray/20 p-3 max-h-48 overflow-y-auto">
+                                        {COLOR_DATABASE.map((color) => {
+                                            const isChecked = product.colors?.includes(color.name);
+                                            return (
+                                                <label key={color.name} className="flex items-center gap-2 cursor-pointer select-none hover:bg-gray-150/40 p-1 rounded transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="colors"
+                                                        value={color.name}
+                                                        defaultChecked={isChecked}
+                                                        className="w-3.5 h-3.5 rounded text-industrial-warning focus:ring-industrial-warning accent-industrial-black"
+                                                    />
+                                                    <span 
+                                                        className="w-3.5 h-3.5 rounded-full border border-gray-300 inline-block flex-shrink-0"
+                                                        style={{ backgroundColor: color.hex }}
+                                                    />
+                                                    <span className="text-[10px] font-mono uppercase tracking-tight text-industrial-black">{color.name}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[9px] text-gray-500 mt-1">Selecciona los colores que estarán activos en la tienda.</p>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
-                                        Tallas (separadas por coma)
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-2">
+                                        Tallas disponibles
                                     </label>
-                                    <input
-                                        name="sizes"
-                                        type="text"
-                                        defaultValue={product.sizes?.join(', ')}
-                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
-                                        placeholder="S, M, L, XL"
-                                    />
+                                    <div className="grid grid-cols-2 gap-2 bg-industrial-light border border-industrial-gray/20 p-3">
+                                        {['S', 'M', 'L', 'XL', 'XXL'].map((size) => {
+                                            const isChecked = product.sizes?.includes(size);
+                                            return (
+                                                <label key={size} className="flex items-center gap-2 cursor-pointer select-none hover:bg-gray-150/40 p-1 rounded transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="sizes"
+                                                        value={size}
+                                                        defaultChecked={isChecked}
+                                                        className="w-3.5 h-3.5 rounded text-industrial-warning focus:ring-industrial-warning accent-industrial-black"
+                                                    />
+                                                    <span className="text-[10px] font-mono uppercase tracking-tight text-industrial-black">{size}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[9px] text-gray-500 mt-1">Selecciona las tallas activas para esta prenda.</p>
                                 </div>
                             </div>
 
