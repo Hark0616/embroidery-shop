@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import MoodSelector from '@/components/MoodSelector';
 
 export const revalidate = 60;
@@ -57,7 +57,7 @@ const MOODS = [
 ];
 
 export default async function Home() {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     let recentDesigns: any[] = [];
 
     if (supabase) {

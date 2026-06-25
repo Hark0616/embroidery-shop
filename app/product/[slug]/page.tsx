@@ -1,11 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { getDeliveryTime } from '@/lib/actions/config';
 import Image from 'next/image';
 import ConfiguratorClient from './ConfiguratorClient';
 import { notFound } from 'next/navigation';
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data: product } = await supabase!
         .from('base_products')
         .select('name')
@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function ProductPage({ params }: { params: { slug: string } }) {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // 1. Fetch Base Product
     const { data: product, error: productError } = await supabase!
