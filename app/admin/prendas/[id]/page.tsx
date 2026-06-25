@@ -39,44 +39,38 @@ function getProductReadiness(product: BaseProduct, mockups: GarmentMockup[]) {
     const calibratedCount = mockups.filter(mockup => getSurfaceCount(mockup) > 0).length;
     const publishedCount = mockups.filter(mockup => mockup.is_public && mockup.status === 'published').length;
 
-    if (product.is_active && publishedCount > 0) {
+    if (product.is_active) {
         return {
             label: 'Publicada',
-            detail: 'La prenda ya puede venderse en la tienda.',
+            detail: 'La prenda está activa en la tienda.',
             className: 'border-green-500 text-green-700 bg-green-50',
         };
     }
 
     if (publishedCount > 0) {
         return {
-            label: 'Lista para activar',
-            detail: 'Ya tiene mockup publicado, falta activar la prenda.',
+            label: 'Listo para activar',
+            detail: 'Tiene mockups listos. Falta activar la prenda.',
             className: 'border-industrial-warning text-industrial-black bg-industrial-warning/10',
         };
     }
 
-    if (calibratedCount > 0) {
-        return {
-            label: 'En revision',
-            detail: 'Tiene calibracion guardada, falta publicar un mockup.',
-            className: 'border-blue-400 text-blue-700 bg-blue-50',
-        };
-    }
-
-    if (mockups.length > 0) {
-        return {
-            label: 'Pendiente de calibrar',
-            detail: 'Ya hay mockups, falta calibrar una zona bordable.',
-            className: 'border-red-300 text-red-700 bg-red-50',
-        };
-    }
-
     return {
-        label: 'Sin mockups',
-        detail: 'Agrega mockups antes de publicar esta prenda.',
+        label: 'Borrador',
+        detail: 'Falta activar la prenda para mostrarla en tienda.',
         className: 'border-gray-300 text-gray-500 bg-gray-50',
     };
 }
+
+const PRODUCT_TYPE_LABELS: Record<string, string> = {
+    camiseta: 'Camiseta',
+    hoodie: 'Hoodie',
+    gorra: 'Gorra',
+    blusa: 'Blusa',
+    tote: 'Tote / Bolso',
+    apparel: 'Ropa / General',
+    otro: 'Otro',
+};
 
 export default async function EditPrendaPage({ params }: { params: { id: string } }) {
     const supabase = await createClient();
@@ -107,6 +101,8 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
     const readiness = getProductReadiness(product as BaseProduct, productMockups);
     const calibratedCount = productMockups.filter(mockup => getSurfaceCount(mockup) > 0).length;
     const publishedCount = productMockups.filter(mockup => mockup.is_public && mockup.status === 'published').length;
+    const firstMockup = productMockups.find(m => m.is_public && m.status === 'published') || productMockups[0];
+    const displayImage = firstMockup?.image_url || product.image_url;
 
     return (
         <div className="p-8 bg-industrial-light min-h-screen">
@@ -140,7 +136,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                             {product.name}
                         </h1>
                         <p className="font-mono text-xs text-industrial-gray mt-2 uppercase tracking-widest">
-                            {product.slug} / {product.product_type || 'sin tipo'}
+                            {product.slug} / {PRODUCT_TYPE_LABELS[product.product_type || ''] || product.product_type || 'sin tipo'}
                         </p>
                     </div>
                     <div className={`border px-4 py-3 ${readiness.className}`}>
@@ -151,8 +147,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                             <input type="hidden" name="intent" value={product.is_active ? 'deactivate' : 'activate'} />
                             <button
                                 type="submit"
-                                disabled={!product.is_active && publishedCount === 0}
-                                className="w-full border border-current px-3 py-2 text-[10px] font-bold uppercase tracking-widest disabled:opacity-40"
+                                className="w-full border border-current px-3 py-2 text-[10px] font-bold uppercase tracking-widest"
                             >
                                 {product.is_active ? 'Desactivar prenda' : 'Activar prenda'}
                             </button>
@@ -165,7 +160,13 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                 <aside className="space-y-6">
                     <section className="bg-white border border-industrial-gray/20 p-5">
                         <div className="aspect-[4/5] bg-gray-100 border border-industrial-gray/10 overflow-hidden mb-5">
-                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                            {displayImage ? (
+                                <img src={displayImage} alt={product.name} className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-300 font-mono text-xs">
+                                    SIN IMAGEN
+                                </div>
+                            )}
                         </div>
                         <div className="space-y-4">
                             <div>

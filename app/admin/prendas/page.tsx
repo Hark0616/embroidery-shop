@@ -7,10 +7,21 @@ type MockupSummary = {
   status: string
   is_public: boolean
   surfaces: unknown
+  image_url?: string
 }
 
 type ProductWithMockups = BaseProduct & {
   garment_mockups?: MockupSummary[]
+}
+
+const PRODUCT_TYPE_LABELS: Record<string, string> = {
+  camiseta: 'Camiseta',
+  hoodie: 'Hoodie',
+  gorra: 'Gorra',
+  blusa: 'Blusa',
+  tote: 'Tote / Bolso',
+  apparel: 'Ropa / General',
+  otro: 'Otro',
 }
 
 function getSurfaceCount(mockup: MockupSummary) {
@@ -36,6 +47,16 @@ function getWorkflowState(product: ProductWithMockups) {
   }
 
   if (product.is_active && publishedCount > 0) {
+    return {
+      label: 'Publicado',
+      detail: `${publishedCount} visible${publishedCount === 1 ? '' : 's'} en tienda`,
+      className: 'border-green-500 text-green-700 bg-green-50',
+      mockupText: `${calibratedCount}/${mockups.length} calibrados`,
+    }
+  }
+
+  // Permisivo: permitir publicar aunque no estén todos o si es activado sin mockups
+  if (product.is_active) {
     return {
       label: 'Publicado',
       detail: `${publishedCount} visible${publishedCount === 1 ? '' : 's'} en tienda`,
@@ -74,7 +95,7 @@ export default async function PrendasPage() {
   const supabase = await createClient()
   const { data: products } = await supabase
     ?.from('base_products')
-    .select('*, garment_mockups(id, status, is_public, surfaces)')
+    .select('*, garment_mockups(id, status, is_public, surfaces, image_url)')
     .order('created_at', { ascending: false }) || { data: [] }
 
   return (
@@ -118,16 +139,22 @@ export default async function PrendasPage() {
           <tbody className="divide-y divide-industrial-gray/10">
             {products?.map((product: ProductWithMockups) => {
               const workflow = getWorkflowState(product)
+              const firstMockup = product.garment_mockups?.find(m => m.is_public && m.status === 'published') || product.garment_mockups?.[0]
+              const displayImage = firstMockup?.image_url || product.image_url
 
               return (
                 <tr key={product.id} className="hover:bg-industrial-light/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="w-16 h-16 bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
+                      {displayImage ? (
+                        <img
+                          src={displayImage}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-gray-400 font-mono">SIN IMAGEN</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -139,7 +166,7 @@ export default async function PrendasPage() {
                   </td>
                   <td className="px-6 py-4">
                     <span className="inline-block px-2 py-1 bg-gray-100 text-xs font-mono uppercase tracking-wide text-gray-600">
-                      {product.product_type || 'sin tipo'}
+                      {PRODUCT_TYPE_LABELS[product.product_type || ''] || product.product_type || 'sin tipo'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
