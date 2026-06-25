@@ -24,7 +24,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
     // 1. Fetch Base Product
     const { data: product, error: productError } = await supabase!
         .from('base_products')
-        .select('*')
+        .select('*, garment_mockups(*)')
         .eq('slug', params.slug)
         .eq('is_active', true)
         .single();
