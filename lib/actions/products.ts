@@ -95,3 +95,36 @@ export async function updateProductPublication(formData: FormData) {
   revalidatePath('/catalog')
   revalidatePath('/studio')
 }
+
+export async function deleteProductAction(formData: FormData) {
+  await requireAdmin()
+  const productId = formData.get('product_id') as string
+  if (!productId) throw new Error('Product ID is required')
+
+  const supabase = await createClient()
+  if (!supabase) throw new Error('Supabase client not initialized')
+
+  // Explicitly delete mockups first to avoid FK violation
+  const { error: mockupError } = await supabase
+    .from('garment_mockups')
+    .delete()
+    .eq('product_id', productId)
+
+  if (mockupError) {
+    console.error('Error deleting product mockups:', mockupError)
+    throw new Error('Failed to delete associated mockups')
+  }
+
+  const { error } = await supabase
+    .from('base_products')
+    .delete()
+    .eq('id', productId)
+
+  if (error) {
+    console.error('Error deleting product:', error)
+    throw new Error('Failed to delete product')
+  }
+
+  revalidatePath('/admin/prendas')
+  redirect('/admin/prendas')
+}

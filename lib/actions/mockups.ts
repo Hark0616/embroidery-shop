@@ -132,3 +132,35 @@ export async function updateMockupCalibration({
 
   return { ok: true, status: nextStatus }
 }
+
+export async function deleteMockupAction(formData: FormData) {
+  await requireAdmin()
+  const mockupId = formData.get('mockup_id') as string
+  const productId = formData.get('product_id') as string
+
+  if (!mockupId) throw new Error('Mockup ID is required')
+
+  const supabase = await createClient()
+  if (!supabase) throw new Error('Supabase client not initialized')
+
+  const { error } = await supabase
+    .from('garment_mockups')
+    .delete()
+    .eq('id', mockupId)
+
+  if (error) {
+    console.error('Error deleting mockup:', error)
+    throw new Error('Failed to delete mockup')
+  }
+
+  revalidatePath('/admin/mockups')
+  revalidatePath('/studio')
+  revalidatePath('/catalog')
+
+  if (productId) {
+    revalidatePath(`/admin/prendas/${productId}`)
+    redirect(`/admin/prendas/${productId}`)
+  } else {
+    redirect('/admin/mockups')
+  }
+}
