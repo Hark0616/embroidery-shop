@@ -281,7 +281,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     updateState({ ...surfaces, [activeId]: updater(surfaces[activeId]) })
   }
 
-  const handleMeshPointMove = (pointIndex: number, newPoint: CalibrationPoint) => {
+  const handleMeshPointMove = (pointIndex: number, newPoint: CalibrationPoint, isShiftPressed = false) => {
     if (!normalizedActive || !activeId) return
 
     let targetX = newPoint.x
@@ -295,21 +295,47 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
       targetY = Oy + (newPoint.y - Oy) / S
     }
 
-    const newMeshPoints = [...normalizedActive.meshPoints]
-    newMeshPoints[pointIndex] = {
-      x: Math.max(0, Math.min(100, Number(targetX.toFixed(1)))),
-      y: Math.max(0, Math.min(100, Number(targetY.toFixed(1)))),
+    // Ensure within bounds
+    targetX = Math.max(0, Math.min(100, targetX))
+    targetY = Math.max(0, Math.min(100, targetY))
+
+    let newMeshPoints = [...normalizedActive.meshPoints]
+
+    if (isShiftPressed) {
+      const oldPoint = normalizedActive.meshPoints[pointIndex]
+      const dx = targetX - oldPoint.x
+      const dy = targetY - oldPoint.y
+
+      if (dx !== 0 || dy !== 0) {
+        newMeshPoints = normalizedActive.meshPoints.map((p, idx) => {
+          if (idx === pointIndex) {
+            return {
+              x: Number(targetX.toFixed(1)),
+              y: Number(targetY.toFixed(1)),
+            }
+          }
+          return {
+            x: Math.max(0, Math.min(100, Number((p.x + dx).toFixed(1)))),
+            y: Math.max(0, Math.min(100, Number((p.y + dy).toFixed(1)))),
+          }
+        })
+      }
+    } else {
+      newMeshPoints[pointIndex] = {
+        x: Number(targetX.toFixed(1)),
+        y: Number(targetY.toFixed(1)),
+      }
     }
 
     // Track pinned points (user-moved)
     const role = getPointRole(pointIndex, normalizedActive.gridSize)
     let newPinned = [...(normalizedActive.pinnedPoints || [])]
-    if (role !== 'corner' && !newPinned.includes(pointIndex)) {
+    if (!isShiftPressed && role !== 'corner' && !newPinned.includes(pointIndex)) {
       newPinned.push(pointIndex)
     }
 
-    // In corner mode, re-interpolate non-pinned points
-    if (editMode === 'corners' && role === 'corner') {
+    // In corner mode, re-interpolate non-pinned points if we dragged a corner normally
+    if (editMode === 'corners' && role === 'corner' && !isShiftPressed) {
       const interpolated = reinterpolateFromCorners(newMeshPoints, newPinned, normalizedActive.gridSize)
       updateState({
         ...surfaces,
@@ -377,7 +403,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     handleMeshPointMove(pointIndex, {
       x: ((e.clientX - rect.left) / rect.width) * 100,
       y: ((e.clientY - rect.top) / rect.height) * 100,
-    })
+    }, e.shiftKey)
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -388,7 +414,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     handleMeshPointMove(dragPointIndex, {
       x: ((e.clientX - rect.left) / rect.width) * 100,
       y: ((e.clientY - rect.top) / rect.height) * 100,
-    })
+    }, e.shiftKey)
   }
 
   const handlePointerUp = () => {
@@ -429,13 +455,14 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const getHandleLabel = (index: number, gridSize: number) => {
     const [row, col] = indexToRowCol(index, gridSize)
     const role = getPointRole(index, gridSize)
+    const suffix = ' (Shift+Arrastrar para mover toda la malla)'
     if (role === 'corner') {
-      if (row === 0 && col === 0) return 'Sup. izquierda'
-      if (row === 0 && col === gridSize - 1) return 'Sup. derecha'
-      if (row === gridSize - 1 && col === 0) return 'Inf. izquierda'
-      return 'Inf. derecha'
+      if (row === 0 && col === 0) return 'Sup. izquierda' + suffix
+      if (row === 0 && col === gridSize - 1) return 'Sup. derecha' + suffix
+      if (row === gridSize - 1 && col === 0) return 'Inf. izquierda' + suffix
+      return 'Inf. derecha' + suffix
     }
-    return `Punto (${row}, ${col})`
+    return `Punto (${row}, ${col})` + suffix
   }
 
   return (
@@ -478,7 +505,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                   {mockup.base_products?.name || 'Prenda'} / {mockup.view}
                 </p>
                 <span className="hidden md:inline font-mono text-[9px] uppercase tracking-widest text-industrial-gray bg-gray-150 border border-industrial-gray/10 px-1.5 py-0.5 rounded">
-                  Atajos: [Ctrl+S] Guardar | [H] Panel
+                  Atajos: [Ctrl+S] Guardar | [H] Panel | [Shift+Arrastrar] Mover Malla
                 </span>
               </div>
               <h2 className="font-heading font-black text-2xl uppercase tracking-tighter">
@@ -603,7 +630,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             <div
               ref={imageContainerRef}
               className={isFullscreen 
-                ? "relative w-auto h-auto max-w-full max-h-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none mx-auto" 
+                ? "relative h-full max-h-full max-w-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none mx-auto" 
                 : "relative w-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none"
               }
               onPointerMove={handlePointerMove}
