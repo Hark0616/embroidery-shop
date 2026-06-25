@@ -1,5 +1,26 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createBaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+
+export function createPublicClient() {
+  let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/["']/g, "").trim();
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.replace(/["']/g, "").trim();
+
+  if (supabaseUrl && !supabaseUrl.startsWith("http")) {
+    supabaseUrl = `https://${supabaseUrl}`;
+  }
+
+  if (!supabaseUrl || !supabaseKey) {
+    return null
+  }
+
+  try {
+    return createBaseClient(supabaseUrl, supabaseKey)
+  } catch (error) {
+    console.error("Error creating public Supabase client:", error);
+    return null;
+  }
+}
 
 export async function createClient() {
   // Sanitize URL: remove quotes, whitespace, and ensure protocol
@@ -44,4 +65,5 @@ export async function createClient() {
     return null;
   }
 }
+
 

@@ -1,13 +1,13 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createPublicClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 const DELIVERY_TIME_KEY = 'delivery_time_message'
 const DEFAULT_MESSAGE = '15 DÍAS HÁBILES'
 
 export async function getDeliveryTime(): Promise<string> {
-    const supabase = await createClient()
+    const supabase = createPublicClient()
 
     if (!supabase) return DEFAULT_MESSAGE
 
