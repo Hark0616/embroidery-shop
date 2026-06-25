@@ -38,6 +38,7 @@ export default async function PrendasPage() {
               <th className="px-6 py-4 font-normal">Imagen</th>
               <th className="px-6 py-4 font-normal">Producto</th>
               <th className="px-6 py-4 font-normal">Precio Base</th>
+              <th className="px-6 py-4 font-normal">Tipo</th>
               <th className="px-6 py-4 font-normal">Variantes</th>
               <th className="px-6 py-4 font-normal text-center">Status</th>
               <th className="px-6 py-4 font-normal text-right">Acciones</th>
@@ -63,6 +64,11 @@ export default async function PrendasPage() {
                   ${product.base_price?.toLocaleString()}
                 </td>
                 <td className="px-6 py-4">
+                  <span className="inline-block px-2 py-1 bg-gray-100 text-xs font-mono uppercase tracking-wide text-gray-600">
+                    {product.product_type || 'sin tipo'}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
                   <div className="flex flex-wrap gap-1">
                     {product.colors?.map((c: string) => (
                       <span key={c} className="w-3 h-3 rounded-full border border-gray-300" style={{ backgroundColor: c === 'Negro' ? '#000' : c === 'Blanco' ? '#fff' : 'gray' }} title={c} />
@@ -81,15 +87,20 @@ export default async function PrendasPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <a href={`/admin/prendas/${product.id}`} className="text-industrial-black font-bold uppercase tracking-widest text-xs hover:underline">
-                    ⚙️ Configurar Zonas
-                  </a>
+                  <div className="flex flex-col gap-2 items-end">
+                    <a href={`/admin/prendas/${product.id}`} className="text-industrial-black font-bold uppercase tracking-widest text-xs hover:underline">
+                      Zonas legado
+                    </a>
+                    <a href="/admin/mockups/new" className="text-industrial-black font-bold uppercase tracking-widest text-xs hover:underline">
+                      + Mockup
+                    </a>
+                  </div>
                 </td>
               </tr>
             ))}
             {(!products || products.length === 0) && (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-gray-500 font-mono text-xs uppercase">
+                <td colSpan={7} className="px-6 py-12 text-center text-gray-500 font-mono text-xs uppercase">
                   No hay prendas registradas.
                 </td>
               </tr>
@@ -100,4 +111,3 @@ export default async function PrendasPage() {
     </div>
   )
 }
-

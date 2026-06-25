@@ -16,6 +16,7 @@ export async function createProduct(formData: FormData) {
 
   const name = formData.get('name') as string
   const slug = formData.get('slug') as string
+  const productType = (formData.get('product_type') as string) || 'camiseta'
   const basePrice = parseFloat(formData.get('base_price') as string)
   const colors = formData.getAll('colors') as string[]
   const sizes = formData.getAll('sizes') as string[]
@@ -36,6 +37,7 @@ export async function createProduct(formData: FormData) {
   const { error } = await supabase.from('base_products').insert({
     name,
     slug,
+    product_type: productType,
     base_price: basePrice,
     colors,
     sizes,

@@ -111,6 +111,7 @@ export interface Database {
           id: string
           name: string
           slug: string
+          product_type: string | null
           base_price: number
           colors: string[]
           sizes: string[]
@@ -128,6 +129,7 @@ export interface Database {
           id?: string
           name: string
           slug: string
+          product_type?: string | null
           base_price: number
           colors: string[]
           sizes: string[]
@@ -145,6 +147,7 @@ export interface Database {
           id?: string
           name?: string
           slug?: string
+          product_type?: string | null
           base_price?: number
           colors?: string[]
           sizes?: string[]
@@ -155,6 +158,56 @@ export interface Database {
           color_images?: Json | null
           placements?: Json | null
           is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      garment_mockups: {
+        Row: {
+          id: string
+          product_id: string
+          name: string
+          slug: string
+          view: 'front' | 'back' | 'side' | 'detail'
+          color_name: string | null
+          image_url: string
+          shadow_map_url: string | null
+          status: 'draft' | 'needs_calibration' | 'calibrated' | 'published'
+          is_public: boolean
+          surfaces: Json
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          name: string
+          slug: string
+          view?: 'front' | 'back' | 'side' | 'detail'
+          color_name?: string | null
+          image_url: string
+          shadow_map_url?: string | null
+          status?: 'draft' | 'needs_calibration' | 'calibrated' | 'published'
+          is_public?: boolean
+          surfaces?: Json
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          product_id?: string
+          name?: string
+          slug?: string
+          view?: 'front' | 'back' | 'side' | 'detail'
+          color_name?: string | null
+          image_url?: string
+          shadow_map_url?: string | null
+          status?: 'draft' | 'needs_calibration' | 'calibrated' | 'published'
+          is_public?: boolean
+          surfaces?: Json
+          sort_order?: number
           created_at?: string
           updated_at?: string
         }
@@ -229,4 +282,25 @@ export type ProductUpdate = Database['public']['Tables']['products']['Update']
 
 export type BaseProduct = Database['public']['Tables']['base_products']['Row']
 export type EmbroideryDesign = Database['public']['Tables']['embroidery_designs']['Row']
+export type GarmentMockup = Database['public']['Tables']['garment_mockups']['Row']
 
+export type CalibrationPoint = {
+  x: number
+  y: number
+}
+
+export type CalibrationSurface = {
+  id: string
+  label: string
+  type: 'quad'
+  view: 'front' | 'back' | 'side' | 'detail'
+  size: 'small' | 'medium' | 'large'
+  points: {
+    topLeft: CalibrationPoint
+    topRight: CalibrationPoint
+    bottomRight: CalibrationPoint
+    bottomLeft: CalibrationPoint
+  }
+  opacity?: number
+  blendMode?: 'normal' | 'multiply' | 'overlay'
+}

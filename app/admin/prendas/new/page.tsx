@@ -55,6 +55,25 @@ export default async function NewProductPage() {
                         />
                     </div>
 
+                    {/* Tipo de prenda */}
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
+                            Tipo de Prenda
+                        </label>
+                        <select
+                            name="product_type"
+                            className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
+                            defaultValue="camiseta"
+                        >
+                            <option value="camiseta">Camiseta</option>
+                            <option value="hoodie">Hoodie</option>
+                            <option value="gorra">Gorra</option>
+                            <option value="blusa">Blusa</option>
+                            <option value="tote">Tote / Bolso</option>
+                            <option value="otro">Otro</option>
+                        </select>
+                    </div>
+
                     {/* Imagen */}
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">

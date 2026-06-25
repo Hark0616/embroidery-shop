@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import type { BaseProduct, EmbroideryDesign } from '@/lib/types/database';
+import type { BaseProduct, CalibrationSurface, EmbroideryDesign, GarmentMockup } from '@/lib/types/database';
 import Visualizer from './Visualizer';
 import OptionSelector from './OptionSelector';
 import { buildWhatsAppMessage } from '@/lib/whatsapp';
@@ -15,6 +15,7 @@ import { uploadCustomDesign } from '@/lib/supabase/storage';
 interface VirtualStudioProps {
     products: BaseProduct[];
     designs: EmbroideryDesign[];
+    mockups?: GarmentMockup[];
 }
 
 type StudioStep = 'product' | 'design' | 'details' | 'checkout';
@@ -27,7 +28,7 @@ const THREAD_COLORS = [
     { id: 'negro', name: 'Negro', css: 'grayscale(1) brightness(0)' },
 ];
 
-export default function VirtualStudio({ products, designs }: VirtualStudioProps) {
+export default function VirtualStudio({ products, designs, mockups = [] }: VirtualStudioProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -54,6 +55,7 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
     const [selectedColor, setSelectedColor] = useState<string>('');
     const [selectedSize, setSelectedSize] = useState<string>('');
     const [selectedThread, setSelectedThread] = useState<string>('original');
+    const [selectedMockupId, setSelectedMockupId] = useState<string>('');
     
     // Placement State
     const [activePlacement, setActivePlacement] = useState<string>('default');
@@ -70,12 +72,44 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
     const [uploadedLogoUrl, setUploadedLogoUrl] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
 
+    const productMockups = useMemo(() => {
+        if (!selectedProduct) return [];
+        return mockups.filter(mockup => mockup.product_id === selectedProduct.id);
+    }, [mockups, selectedProduct]);
+
+    const visibleMockups = useMemo(() => {
+        if (!selectedColor) return productMockups;
+        const normalizedColor = selectedColor.toLowerCase();
+        const exact = productMockups.filter(mockup => mockup.color_name?.toLowerCase() === normalizedColor);
+        return exact.length > 0 ? exact : productMockups;
+    }, [productMockups, selectedColor]);
+
+    const selectedMockup = useMemo(() => {
+        if (visibleMockups.length === 0) return null;
+        return visibleMockups.find(mockup => mockup.id === selectedMockupId) || visibleMockups[0];
+    }, [selectedMockupId, visibleMockups]);
+
+    const calibratedSurfaces = useMemo(() => {
+        if (
+            selectedMockup?.surfaces &&
+            typeof selectedMockup.surfaces === 'object' &&
+            !Array.isArray(selectedMockup.surfaces) &&
+            Object.keys(selectedMockup.surfaces).length > 0
+        ) {
+            return selectedMockup.surfaces as Record<string, CalibrationSurface>;
+        }
+        return null;
+    }, [selectedMockup]);
+
     const placements = useMemo(() => {
+        if (calibratedSurfaces) {
+            return calibratedSurfaces;
+        }
         if (selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0) {
             return selectedProduct.placements as Record<string, any>;
         }
         return getPlacementsForProduct(selectedProduct?.slug || '');
-    }, [selectedProduct]);
+    }, [calibratedSurfaces, selectedProduct]);
 
     // Reset color/size/placement when product changes
     useEffect(() => {
@@ -93,6 +127,24 @@ export default function VirtualStudio({ products, designs }: VirtualStudioProps)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedProduct]);
+
+    useEffect(() => {
+        if (visibleMockups.length === 0) {
+            setSelectedMockupId('');
+            return;
+        }
+
+        if (!visibleMockups.some(mockup => mockup.id === selectedMockupId)) {
+            setSelectedMockupId(visibleMockups[0].id);
+        }
+    }, [selectedMockupId, visibleMockups]);
+
+    useEffect(() => {
+        const keys = Object.keys(placements);
+        if (keys.length > 0 && !keys.includes(activePlacement)) {
+            setActivePlacement(keys[0]);
+        }
+    }, [activePlacement, placements]);
 
     // Sync theme accent color
     useEffect(() => {
@@ -211,11 +263,15 @@ Hola, quiero ordenar este bordado personalizado.`;
     const displayY = activePlacementConfig?.y ?? 35;
     const displayScale = activePlacementConfig?.scale ?? 25;
     const isBackView = activePlacementConfig?.view === 'back';
+    const activeCalibratedSurface = calibratedSurfaces?.[activePlacement] || null;
 
     const colorImages = selectedProduct?.color_images as Record<string, string> | undefined;
-    const currentBaseImage = (isBackView && selectedProduct?.back_image_url)
-        ? selectedProduct.back_image_url
-        : (colorImages?.[selectedColor] || selectedProduct?.image_url);
+    const currentBaseImage = selectedMockup?.image_url || (
+        (isBackView && selectedProduct?.back_image_url)
+            ? selectedProduct.back_image_url
+            : (colorImages?.[selectedColor] || selectedProduct?.image_url)
+    );
+    const currentTextureMap = selectedMockup?.shadow_map_url || selectedProduct?.texture_map_url;
 
     // Memoize options
     const productOptions = useMemo(() => products.map(p => ({
@@ -299,7 +355,7 @@ Hola, quiero ordenar este bordado personalizado.`;
             <div className="order-1 lg:order-1 lg:col-span-7 h-[50vh] md:h-[60vh] lg:h-auto w-full aspect-[4/5] lg:aspect-auto">
                 <Visualizer
                     productImage={currentBaseImage}
-                    textureMapImage={selectedProduct?.texture_map_url}
+                    textureMapImage={currentTextureMap}
                     designImage={isCustomUpload ? customPreviewUrl : selectedDesign?.image_url}
                     productName={selectedProduct?.name}
                     designName={isCustomUpload ? customDesignName : selectedDesign?.name}
@@ -311,6 +367,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                     rotateY={activePlacementConfig?.rotateY ?? 0}
                     isAdminMode={false}
                     threadFilter={THREAD_COLORS.find(t => t.id === selectedThread)?.css || 'none'}
+                    calibratedSurface={activeCalibratedSurface}
                 />
             </div>
 
@@ -587,6 +644,36 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     </span>
                                     Personaliza Detalles
                                 </h3>
+
+                                {visibleMockups.length > 1 && (
+                                    <div className="mb-8">
+                                        <h3 className="font-heading font-bold text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            Mockup de vista
+                                            <span className="text-industrial-warning text-[10px] ml-auto font-normal normal-case opacity-50">Preview</span>
+                                        </h3>
+                                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                            {visibleMockups.map(mockup => (
+                                                <button
+                                                    key={mockup.id}
+                                                    type="button"
+                                                    onClick={() => setSelectedMockupId(mockup.id)}
+                                                    className={`flex-shrink-0 w-24 border p-2 text-left transition-all ${
+                                                        selectedMockup?.id === mockup.id
+                                                            ? 'border-industrial-black bg-industrial-black text-white'
+                                                            : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
+                                                    }`}
+                                                >
+                                                    <div className="relative w-full aspect-[4/5] bg-gray-50 mb-2 overflow-hidden">
+                                                        <Image src={mockup.image_url} alt={mockup.name} fill className="object-contain" sizes="96px" />
+                                                    </div>
+                                                    <span className="block font-bold text-[9px] uppercase tracking-tight leading-tight">
+                                                        {mockup.name}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 <OptionSelector
                                     label="Ubicación del Bordado"

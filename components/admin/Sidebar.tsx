@@ -38,6 +38,17 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    name: 'Mockups Calibrables',
+    href: '/admin/mockups',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M4 5h16v14H4zM8 9h8M8 13h5M17 17l3-3m0 0l-3-3m3 3H9"
+        />
+      </svg>
+    ),
+  },
 ]
 
 export default function Sidebar() {
@@ -122,4 +133,3 @@ export default function Sidebar() {
     </aside>
   )
 }
-

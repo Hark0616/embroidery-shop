@@ -4,6 +4,8 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef } from 'react';
 import EmbroideryFilters from './EmbroideryFilters';
+import QuadWarpOverlay from './QuadWarpOverlay';
+import type { CalibrationSurface } from '@/lib/types/database';
 
 interface VisualizerProps {
     productImage?: string | null;
@@ -28,6 +30,7 @@ interface VisualizerProps {
     // Style
     threadFilter?: string;
     placementId?: string;
+    calibratedSurface?: CalibrationSurface | null;
 }
 
 export default function Visualizer({ 
@@ -46,7 +49,8 @@ export default function Visualizer({
     isAdminMode = false,
     onAdminUpdate,
     threadFilter = 'none',
-    placementId
+    placementId,
+    calibratedSurface = null
 }: VisualizerProps) {
     const [isZoomed, setIsZoomed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -153,7 +157,15 @@ export default function Visualizer({
                     {/* LAYER 2: Embroidery Design Container */}
                     <div className="absolute inset-0 pointer-events-none" style={{ perspective: '1000px' }}>
                         <AnimatePresence>
-                            {designImage && productImage && (
+                            {designImage && productImage && calibratedSurface ? (
+                                <QuadWarpOverlay
+                                    imageUrl={designImage}
+                                    surface={calibratedSurface}
+                                    opacity={calibratedSurface.opacity}
+                                    blendMode={calibratedSurface.blendMode}
+                                    filter={threadFilter === 'none' ? undefined : threadFilter}
+                                />
+                            ) : designImage && productImage ? (
                                 <motion.div
                                     key={isAdminMode ? `admin-${placementId || 'default'}` : designImage}
                                     initial={{ opacity: 0, scale: 0.8 }}
@@ -208,7 +220,7 @@ export default function Visualizer({
                                         </div>
                                     )}
                                 </motion.div>
-                            )}
+                            ) : null}
                         </AnimatePresence>
                     </div>
 
