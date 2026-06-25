@@ -19,7 +19,7 @@ export default async function EditMockupPage({
   const [{ data: mockup }, { data: designs }] = await Promise.all([
     supabase
       .from('garment_mockups')
-      .select('*, base_products(name, slug)')
+      .select('*, base_products(name, slug, product_type)')
       .eq('id', params.id)
       .single(),
     supabase

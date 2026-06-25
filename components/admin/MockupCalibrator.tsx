@@ -22,13 +22,41 @@ const SIZE_LABELS = {
   large: 'Grande',
 }
 
-function createSurface(id: string, label: string, view: CalibrationSurface['view']): CalibrationSurface {
+const SURFACE_PRESETS: Record<string, Array<{ id: string; label: string; size: CalibrationSurface['size'] }>> = {
+  apparel: [
+    { id: 'pecho-centro', label: 'Pecho centro', size: 'medium' },
+    { id: 'pecho-izquierdo', label: 'Pecho izquierdo', size: 'small' },
+    { id: 'espalda-centro', label: 'Espalda centro', size: 'large' },
+    { id: 'manga', label: 'Manga', size: 'small' },
+  ],
+  hoodie: [
+    { id: 'pecho-centro', label: 'Pecho centro', size: 'medium' },
+    { id: 'pecho-izquierdo', label: 'Pecho izquierdo', size: 'small' },
+    { id: 'espalda-centro', label: 'Espalda centro', size: 'large' },
+    { id: 'manga', label: 'Manga', size: 'small' },
+  ],
+  gorra: [
+    { id: 'frente-centro', label: 'Frente centro', size: 'small' },
+    { id: 'lateral', label: 'Lateral', size: 'small' },
+  ],
+  tote: [
+    { id: 'centro', label: 'Centro', size: 'large' },
+    { id: 'frente-bajo', label: 'Frente bajo', size: 'medium' },
+  ],
+}
+
+function createSurface(
+  id: string,
+  label: string,
+  view: CalibrationSurface['view'],
+  size: CalibrationSurface['size'] = 'medium',
+): CalibrationSurface {
   return {
     id,
     label,
     type: 'quad',
     view,
-    size: 'medium',
+    size,
     points: {
       topLeft: { x: 36, y: 30 },
       topRight: { x: 64, y: 30 },
@@ -38,6 +66,16 @@ function createSurface(id: string, label: string, view: CalibrationSurface['view
     opacity: 0.94,
     blendMode: 'multiply',
   }
+}
+
+function getPresetGroup(productType?: string | null) {
+  const normalized = (productType || '').toLowerCase()
+
+  if (normalized.includes('gorra') || normalized.includes('cap')) return SURFACE_PRESETS.gorra
+  if (normalized.includes('hoodie')) return SURFACE_PRESETS.hoodie
+  if (normalized.includes('tote') || normalized.includes('bolso')) return SURFACE_PRESETS.tote
+
+  return SURFACE_PRESETS.apparel
 }
 
 function surfaceToPolygon(surface: CalibrationSurface) {
@@ -59,6 +97,7 @@ interface MockupCalibratorProps {
     base_products?: {
       name: string
       slug: string
+      product_type?: string | null
     } | null
   }
   designs: EmbroideryDesign[]
@@ -74,23 +113,28 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [draftLabel, setDraftLabel] = useState('Pecho centro')
   const [previewDesignId, setPreviewDesignId] = useState(designs[0]?.id || '')
   const [isPublic, setIsPublic] = useState(mockup.is_public)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
   const [isPending, startTransition] = useTransition()
 
   const activeSurface = activeId ? surfaces[activeId] : null
+  const presetSurfaces = useMemo(
+    () => getPresetGroup(mockup.base_products?.product_type),
+    [mockup.base_products?.product_type],
+  )
   const previewDesign = useMemo(
     () => designs.find(design => design.id === previewDesignId) || designs[0],
     [designs, previewDesignId],
   )
 
-  const status = isPublic ? 'published' : Object.keys(surfaces).length > 0 ? 'calibrated' : 'needs_calibration'
+  const canPublish = Object.keys(surfaces).length > 0
 
-  const addSurface = () => {
-    const id = normalizeId(draftLabel || 'zona')
+  const addSurface = (label = draftLabel, size: CalibrationSurface['size'] = 'medium') => {
+    const id = normalizeId(label || 'zona')
     if (!id) return
 
     const uniqueId = surfaces[id] ? `${id}-${Object.keys(surfaces).length + 1}` : id
-    const next = createSurface(uniqueId, draftLabel || uniqueId, mockup.view)
+    const next = createSurface(uniqueId, label || uniqueId, mockup.view, size)
     setSurfaces(prev => ({ ...prev, [uniqueId]: next }))
     setActiveId(uniqueId)
     setDraftLabel('')
@@ -139,15 +183,19 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     })
   }
 
-  const save = () => {
+  const save = (publishOverride?: boolean) => {
+    const nextIsPublic = typeof publishOverride === 'boolean' ? publishOverride : isPublic
+    const nextStatus = nextIsPublic ? 'published' : Object.keys(surfaces).length > 0 ? 'calibrated' : 'needs_calibration'
+
     setSaveMessage('')
+    setIsPublic(nextIsPublic)
     startTransition(async () => {
       try {
         const result = await updateMockupCalibration({
           mockupId: mockup.id,
           surfaces,
-          status,
-          isPublic,
+          status: nextStatus,
+          isPublic: nextIsPublic,
         })
         setSaveMessage(`Guardado como ${result.status}.`)
       } catch (error) {
@@ -157,7 +205,26 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)] gap-6">
+    <div className="space-y-6">
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        {[
+          ['1', 'Elegir zona', Object.keys(surfaces).length > 0],
+          ['2', 'Ajustar area', !!activeSurface],
+          ['3', 'Probar diseno', !!previewDesign],
+          ['4', 'Publicar', isPublic],
+        ].map(([step, label, done]) => (
+          <div key={step as string} className={`border p-4 bg-white ${done ? 'border-industrial-black' : 'border-industrial-gray/20'}`}>
+            <div className="flex items-center gap-3">
+              <span className={`h-7 w-7 flex items-center justify-center border text-[10px] font-bold ${done ? 'bg-industrial-black text-white border-industrial-black' : 'border-industrial-gray/30 text-industrial-gray'}`}>
+                {done ? 'OK' : step}
+              </span>
+              <span className="font-bold text-xs uppercase tracking-widest">{label}</span>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)] gap-6">
       <section className="bg-white border border-industrial-gray/20 p-4">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div>
@@ -249,13 +316,29 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
       <aside className="space-y-4">
         <section className="bg-white border border-industrial-gray/20 p-5">
           <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
-            Superficies bordables
+            Zonas bordables
           </h3>
           <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-4">
-            Crea una zona por área real donde la máquina puede bordar.
+            Elige una zona sugerida y ajusta sus esquinas sobre el mockup.
           </p>
 
-          <div className="flex gap-2 mb-4">
+          <div className="grid grid-cols-2 gap-2 mb-5">
+            {presetSurfaces.map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => addSurface(preset.label, preset.size)}
+                className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50"
+              >
+                <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
+                <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-1">
+                  {SIZE_LABELS[preset.size]}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2 mb-4 border-t border-industrial-gray/10 pt-4">
             <input
               type="text"
               value={draftLabel}
@@ -265,7 +348,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             />
             <button
               type="button"
-              onClick={addSurface}
+              onClick={() => addSurface()}
               className="bg-industrial-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black"
             >
               Agregar
@@ -338,7 +421,15 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 </select>
               </label>
 
-              {CORNERS.map(({ key, label }) => {
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(value => !value)}
+                className="w-full border border-industrial-gray/20 px-3 py-3 text-left font-bold text-[10px] uppercase tracking-widest hover:border-industrial-black"
+              >
+                {showAdvanced ? 'Ocultar ajuste avanzado' : 'Mostrar ajuste avanzado'}
+              </button>
+
+              {showAdvanced && CORNERS.map(({ key, label }) => {
                 const point = activeSurface.points[key]
                 return (
                   <div key={key} className="grid grid-cols-[1fr_74px_74px] gap-2 items-end">
@@ -396,27 +487,41 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
           <label className="flex items-center justify-between gap-4 border border-industrial-gray/20 p-3 mb-4">
             <span>
-              <span className="block font-bold text-xs uppercase tracking-widest">Publicar mockup</span>
+              <span className="block font-bold text-xs uppercase tracking-widest">Estado publico</span>
               <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                Solo si ya se ve bien con diseños de prueba.
+                {isPublic ? 'Visible en el Studio publico.' : 'Privado hasta que lo publiques.'}
               </span>
             </span>
-            <input
-              type="checkbox"
-              checked={isPublic}
-              onChange={event => setIsPublic(event.target.checked)}
-              className="h-5 w-5"
-            />
+            <span className={`px-2 py-1 border text-[9px] font-bold uppercase tracking-widest ${isPublic ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-50'}`}>
+              {isPublic ? 'Publicado' : 'Privado'}
+            </span>
           </label>
 
-          <button
-            type="button"
-            onClick={save}
-            disabled={isPending}
-            className="w-full bg-industrial-warning px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50"
-          >
-            {isPending ? 'Guardando...' : 'Guardar calibración'}
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => save(false)}
+              disabled={isPending}
+              className="w-full border border-industrial-gray/30 px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-gray-50 disabled:opacity-50"
+            >
+              {isPending ? 'Guardando...' : 'Guardar privado'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => save(true)}
+              disabled={isPending || !canPublish}
+              className="w-full bg-industrial-warning px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50 disabled:hover:bg-industrial-warning disabled:hover:text-industrial-black"
+            >
+              Publicar mockup
+            </button>
+          </div>
+
+          {!canPublish && (
+            <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-red-600">
+              Crea al menos una zona bordable antes de publicar.
+            </p>
+          )}
 
           {saveMessage && (
             <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
@@ -425,6 +530,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
           )}
         </section>
       </aside>
+      </div>
     </div>
   )
 }
