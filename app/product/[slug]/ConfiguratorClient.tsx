@@ -70,8 +70,22 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
         ) {
             return selectedMockup.surfaces as Record<string, CalibrationSurface>;
         }
+
+        // Fallback: Find another mockup of the same view that has calibrated surfaces
+        const fallbackMockup = productMockups.find(m =>
+            m.view === selectedMockup?.view &&
+            m.surfaces &&
+            typeof m.surfaces === 'object' &&
+            !Array.isArray(m.surfaces) &&
+            Object.keys(m.surfaces).length > 0
+        );
+
+        if (fallbackMockup?.surfaces) {
+            return fallbackMockup.surfaces as Record<string, CalibrationSurface>;
+        }
+
         return null;
-    }, [selectedMockup]);
+    }, [selectedMockup, productMockups]);
 
     const placements = useMemo(() => {
         const allCalibrated: Record<string, any> = {};
@@ -145,7 +159,14 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
             ? (product as any).back_image_url
             : (colorImages?.[selectedColor] || product.image_url)
     );
-    const currentTextureMap = selectedMockup?.shadow_map_url || (product as any).texture_map_url;
+    // Find shadow map fallback from another mockup of the same view if the active mockup does not have one
+    const fallbackShadowMap = useMemo(() => {
+        if (!selectedMockup) return null;
+        const match = productMockups.find(m => m.view === selectedMockup.view && m.shadow_map_url);
+        return match?.shadow_map_url || null;
+    }, [selectedMockup, productMockups]);
+
+    const currentTextureMap = selectedMockup?.shadow_map_url || fallbackShadowMap || (product as any).texture_map_url;
     const activeCalibratedSurface = calibratedSurfaces?.[activePlacement] || null;
 
     const placementOptions = useMemo(() => Object.entries(placements).map(([key, config]) => ({
