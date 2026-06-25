@@ -12,7 +12,7 @@ export default async function NewGarmentMockupPage({ params }: { params: { id: s
 
   const { data: product } = await supabase
     .from('base_products')
-    .select('id, name, slug, product_type')
+    .select('id, name, slug, product_type, colors')
     .eq('id', params.id)
     .single()
 
@@ -87,12 +87,27 @@ export default async function NewGarmentMockupPage({ params }: { params: { id: s
               <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
                 Color / variante
               </label>
-              <input
-                name="color_name"
-                type="text"
-                className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-                placeholder="Negro, Blanco, Beige..."
-              />
+              {product.colors && product.colors.length > 0 ? (
+                <select
+                  name="color_name"
+                  required
+                  className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
+                >
+                  <option value="">Seleccionar color...</option>
+                  {product.colors.map((color: string) => (
+                    <option key={color} value={color}>
+                      {color}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  name="color_name"
+                  type="text"
+                  className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
+                  placeholder="Negro, Blanco, Beige..."
+                />
+              )}
             </div>
           </div>
 
