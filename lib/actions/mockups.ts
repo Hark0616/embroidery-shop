@@ -33,6 +33,7 @@ export async function createMockup(formData: FormData) {
   const colorName = (formData.get('color_name') as string) || null
   const file = formData.get('image') as File
   const shadowFile = formData.get('shadow_map') as File | null
+  const redirectTo = formData.get('redirect_to') as string | null
 
   if (!productId || !name) {
     throw new Error('Product and name are required')
@@ -54,7 +55,7 @@ export async function createMockup(formData: FormData) {
 
   const slug = slugify(rawSlug || name)
 
-  const { error } = await supabase.from('garment_mockups').insert({
+  const { data: mockup, error } = await supabase.from('garment_mockups').insert({
     product_id: productId,
     name,
     slug,
@@ -65,7 +66,7 @@ export async function createMockup(formData: FormData) {
     status: 'needs_calibration',
     is_public: false,
     surfaces: {},
-  })
+  }).select('id').single()
 
   if (error) {
     console.error('Error creating mockup:', error)
@@ -73,6 +74,16 @@ export async function createMockup(formData: FormData) {
   }
 
   revalidatePath('/admin/mockups')
+  revalidatePath(`/admin/prendas/${productId}`)
+
+  if (redirectTo === 'calibrator' && mockup?.id) {
+    redirect(`/admin/mockups/${mockup.id}?from_product=${productId}`)
+  }
+
+  if (redirectTo === 'product') {
+    redirect(`/admin/prendas/${productId}`)
+  }
+
   redirect('/admin/mockups')
 }
 

@@ -10,6 +10,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
         .from('base_products')
         .select('name')
         .eq('slug', params.slug)
+        .eq('is_active', true)
         .single();
 
     return {
@@ -25,6 +26,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
         .from('base_products')
         .select('*')
         .eq('slug', params.slug)
+        .eq('is_active', true)
         .single();
 
     if (productError || !product) {

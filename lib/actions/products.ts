@@ -6,6 +6,14 @@ import { uploadImage } from './storage'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+function hasCalibratedSurface(surfaces: unknown) {
+  if (!surfaces || typeof surfaces !== 'object' || Array.isArray(surfaces)) {
+    return false
+  }
+
+  return Object.keys(surfaces).length > 0
+}
+
 export async function createProduct(formData: FormData) {
   await requireAdmin()
   const supabase = await createClient()
@@ -43,7 +51,7 @@ export async function createProduct(formData: FormData) {
     sizes,
     stock_status: stockStatus,
     image_url: imageUrl,
-    is_active: true
+    is_active: false
   })
 
   if (error) {
@@ -53,4 +61,55 @@ export async function createProduct(formData: FormData) {
 
   revalidatePath('/admin/prendas')
   redirect('/admin/prendas')
+}
+
+export async function updateProductPublication(formData: FormData) {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
+  const productId = formData.get('product_id') as string
+  const intent = formData.get('intent') as string
+
+  if (!productId || !['activate', 'deactivate'].includes(intent)) {
+    throw new Error('Invalid publication request')
+  }
+
+  if (intent === 'activate') {
+    const { data: mockups, error: mockupsError } = await supabase
+      .from('garment_mockups')
+      .select('id, status, is_public, surfaces')
+      .eq('product_id', productId)
+      .eq('status', 'published')
+      .eq('is_public', true)
+
+    if (mockupsError) {
+      console.error('Error checking mockups:', mockupsError)
+      throw new Error('Failed to validate mockups before publishing')
+    }
+
+    const hasPublishedMockup = (mockups || []).some(mockup => hasCalibratedSurface(mockup.surfaces))
+
+    if (!hasPublishedMockup) {
+      throw new Error('Publish at least one calibrated mockup before activating this garment')
+    }
+  }
+
+  const { error } = await supabase
+    .from('base_products')
+    .update({ is_active: intent === 'activate' })
+    .eq('id', productId)
+
+  if (error) {
+    console.error('Error updating product publication:', error)
+    throw new Error('Failed to update garment publication')
+  }
+
+  revalidatePath('/admin/prendas')
+  revalidatePath(`/admin/prendas/${productId}`)
+  revalidatePath('/catalog')
+  revalidatePath('/studio')
 }
