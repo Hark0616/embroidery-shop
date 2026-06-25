@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BaseProduct, GarmentMockup } from '@/lib/types/database';
+import { updateProductPublication } from '@/lib/actions/products';
 
 function getSurfaceCount(mockup: GarmentMockup) {
     if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
@@ -145,6 +146,17 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                     <div className={`border px-4 py-3 ${readiness.className}`}>
                         <p className="font-bold text-xs uppercase tracking-widest">{readiness.label}</p>
                         <p className="font-mono text-[10px] uppercase tracking-widest mt-1">{readiness.detail}</p>
+                        <form action={updateProductPublication} className="mt-3">
+                            <input type="hidden" name="product_id" value={product.id} />
+                            <input type="hidden" name="intent" value={product.is_active ? 'deactivate' : 'activate'} />
+                            <button
+                                type="submit"
+                                disabled={!product.is_active && publishedCount === 0}
+                                className="w-full border border-current px-3 py-2 text-[10px] font-bold uppercase tracking-widest disabled:opacity-40"
+                            >
+                                {product.is_active ? 'Desactivar prenda' : 'Activar prenda'}
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
