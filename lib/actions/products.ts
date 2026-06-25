@@ -78,25 +78,7 @@ export async function updateProductPublication(formData: FormData) {
     throw new Error('Invalid publication request')
   }
 
-  if (intent === 'activate') {
-    const { data: mockups, error: mockupsError } = await supabase
-      .from('garment_mockups')
-      .select('id, status, is_public, surfaces')
-      .eq('product_id', productId)
-      .eq('status', 'published')
-      .eq('is_public', true)
-
-    if (mockupsError) {
-      console.error('Error checking mockups:', mockupsError)
-      throw new Error('Failed to validate mockups before publishing')
-    }
-
-    const hasPublishedMockup = (mockups || []).some(mockup => hasCalibratedSurface(mockup.surfaces))
-
-    if (!hasPublishedMockup) {
-      throw new Error('Publish at least one calibrated mockup before activating this garment')
-    }
-  }
+  // Activation does not strictly require a mockup now, permitting fallbacks.
 
   const { error } = await supabase
     .from('base_products')
