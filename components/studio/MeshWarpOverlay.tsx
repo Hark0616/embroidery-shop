@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { CalibrationPoint } from '@/lib/types/database'
 
@@ -82,14 +82,31 @@ export default function MeshWarpOverlay({
   className,
 }: MeshWarpOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null)
 
+  // Asynchronously load the image when the URL changes and cache it
+  useEffect(() => {
+    if (!imageUrl) {
+      setLoadedImage(null)
+      return
+    }
+
+    setLoadedImage(null) // Reset to avoid flash of old image
+
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      setLoadedImage(img)
+    }
+    img.src = imageUrl
+  }, [imageUrl])
+
+  // Draw the mesh warp using the cached loaded image
   useEffect(() => {
     const canvas = canvasRef.current
     const parent = canvas?.parentElement
-    if (!canvas || !parent) return
+    if (!canvas || !parent || !loadedImage) return
     if (!meshPoints || meshPoints.length !== gridSize * gridSize) return
-
-    let cancelled = false
 
     const render = () => {
       const rect = parent.getBoundingClientRect()
@@ -108,57 +125,49 @@ export default function MeshWarpOverlay({
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
       context.clearRect(0, 0, width, height)
 
-      const image = new window.Image()
-      image.crossOrigin = 'anonymous'
-      image.onload = () => {
-        if (cancelled) return
-        context.clearRect(0, 0, width, height)
+      const imgW = loadedImage.naturalWidth
+      const imgH = loadedImage.naturalHeight
+      const cellsX = gridSize - 1
+      const cellsY = gridSize - 1
 
-        const imgW = image.naturalWidth
-        const imgH = image.naturalHeight
-        const cellsX = gridSize - 1
-        const cellsY = gridSize - 1
+      // For each cell in the grid, draw 2 triangles
+      for (let row = 0; row < cellsY; row++) {
+        for (let col = 0; col < cellsX; col++) {
+          // Grid point indices
+          const tlIdx = row * gridSize + col
+          const trIdx = row * gridSize + col + 1
+          const blIdx = (row + 1) * gridSize + col
+          const brIdx = (row + 1) * gridSize + col + 1
 
-        // For each cell in the grid, draw 2 triangles
-        for (let row = 0; row < cellsY; row++) {
-          for (let col = 0; col < cellsX; col++) {
-            // Grid point indices
-            const tlIdx = row * gridSize + col
-            const trIdx = row * gridSize + col + 1
-            const blIdx = (row + 1) * gridSize + col
-            const brIdx = (row + 1) * gridSize + col + 1
+          // Source points (from the design image)
+          const srcTL: Point = { x: (col / cellsX) * imgW, y: (row / cellsY) * imgH }
+          const srcTR: Point = { x: ((col + 1) / cellsX) * imgW, y: (row / cellsY) * imgH }
+          const srcBL: Point = { x: (col / cellsX) * imgW, y: ((row + 1) / cellsY) * imgH }
+          const srcBR: Point = { x: ((col + 1) / cellsX) * imgW, y: ((row + 1) / cellsY) * imgH }
 
-            // Source points (from the design image)
-            const srcTL: Point = { x: (col / cellsX) * imgW, y: (row / cellsY) * imgH }
-            const srcTR: Point = { x: ((col + 1) / cellsX) * imgW, y: (row / cellsY) * imgH }
-            const srcBL: Point = { x: (col / cellsX) * imgW, y: ((row + 1) / cellsY) * imgH }
-            const srcBR: Point = { x: ((col + 1) / cellsX) * imgW, y: ((row + 1) / cellsY) * imgH }
+          // Target points (where they land on the canvas, from mesh)
+          const tgtTL = toCanvasPoint(meshPoints[tlIdx], width, height)
+          const tgtTR = toCanvasPoint(meshPoints[trIdx], width, height)
+          const tgtBL = toCanvasPoint(meshPoints[blIdx], width, height)
+          const tgtBR = toCanvasPoint(meshPoints[brIdx], width, height)
 
-            // Target points (where they land on the canvas, from mesh)
-            const tgtTL = toCanvasPoint(meshPoints[tlIdx], width, height)
-            const tgtTR = toCanvasPoint(meshPoints[trIdx], width, height)
-            const tgtBL = toCanvasPoint(meshPoints[blIdx], width, height)
-            const tgtBR = toCanvasPoint(meshPoints[brIdx], width, height)
+          // Triangle 1: TL → TR → BR
+          drawTriangle(
+            context,
+            loadedImage,
+            [srcTL, srcTR, srcBR],
+            [tgtTL, tgtTR, tgtBR],
+          )
 
-            // Triangle 1: TL → TR → BR
-            drawTriangle(
-              context,
-              image,
-              [srcTL, srcTR, srcBR],
-              [tgtTL, tgtTR, tgtBR],
-            )
-
-            // Triangle 2: TL → BR → BL
-            drawTriangle(
-              context,
-              image,
-              [srcTL, srcBR, srcBL],
-              [tgtTL, tgtBR, tgtBL],
-            )
-          }
+          // Triangle 2: TL → BR → BL
+          drawTriangle(
+            context,
+            loadedImage,
+            [srcTL, srcBR, srcBL],
+            [tgtTL, tgtBR, tgtBL],
+          )
         }
       }
-      image.src = imageUrl
     }
 
     render()
@@ -167,10 +176,9 @@ export default function MeshWarpOverlay({
     observer.observe(parent)
 
     return () => {
-      cancelled = true
       observer.disconnect()
     }
-  }, [imageUrl, gridSize, meshPoints])
+  }, [loadedImage, gridSize, meshPoints])
 
   return (
     <canvas
