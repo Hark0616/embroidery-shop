@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useCallback, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { updateMockupCalibration } from '@/lib/actions/mockups'
 import type { CalibrationPoint, CalibrationSurface, EmbroideryDesign, GarmentMockup } from '@/lib/types/database'
 import MeshWarpOverlay from '@/components/studio/MeshWarpOverlay'
@@ -154,8 +154,55 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [dragPointIndex, setDragPointIndex] = useState<number | null>(null)
   const [isZoomed, setIsZoomed] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(true)
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
+
+  // Synchronize fullscreen state with browser native fullscreen
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  // Keyboard shortcuts (Ctrl+S for save, H to toggle sidebar)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        save()
+      }
+      
+      const target = e.target as HTMLElement
+      const isTyping = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      if (!isTyping) {
+        if (e.key.toLowerCase() === 'h') {
+          e.preventDefault()
+          setShowSidebar(prev => !prev)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [surfaces, isPublic])
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      const container = document.getElementById('calibrator-container')
+      container?.requestFullscreen().catch((err) => {
+        console.error('Error entering fullscreen:', err)
+      })
+    } else {
+      document.exitFullscreen()
+    }
+  }
 
   const activeSurface = activeId ? surfaces[activeId] : null
   const normalizedActive = activeSurface ? normalizeSurface(activeSurface, DEFAULT_GRID_SIZE) : null
@@ -415,22 +462,41 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
         ))}
       </section>
 
-      <div className={isFullscreen 
-        ? "fixed inset-0 z-[9999] bg-industrial-light p-6 grid grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)] gap-6 overflow-hidden animate-fade-in" 
-        : "grid grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)] gap-6"
+      <div id="calibrator-container" className={isFullscreen 
+        ? `fixed inset-0 z-[9999] bg-industrial-light p-6 grid ${showSidebar ? 'grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)]' : 'grid-cols-1'} gap-6 overflow-hidden animate-fade-in h-screen w-screen` 
+        : `grid ${showSidebar ? 'grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)]' : 'grid-cols-1'} gap-6`
       }>
         {/* Left: Image + Overlay */}
-        <section className="bg-white border border-industrial-gray/20 p-4">
-          <div className="flex items-center justify-between gap-4 mb-4">
+        <section className={isFullscreen 
+          ? "bg-white border border-industrial-gray/20 p-4 flex flex-col justify-center items-center h-full overflow-hidden" 
+          : "bg-white border border-industrial-gray/20 p-4"
+        }>
+          <div className="w-full flex items-center justify-between gap-4 mb-4">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                {mockup.base_products?.name || 'Prenda'} / {mockup.view}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                  {mockup.base_products?.name || 'Prenda'} / {mockup.view}
+                </p>
+                <span className="hidden md:inline font-mono text-[9px] uppercase tracking-widest text-industrial-gray bg-gray-150 border border-industrial-gray/10 px-1.5 py-0.5 rounded">
+                  Atajos: [Ctrl+S] Guardar | [H] Panel
+                </span>
+              </div>
               <h2 className="font-heading font-black text-2xl uppercase tracking-tighter">
                 {mockup.name}
               </h2>
             </div>
             <div className="flex items-center gap-4">
+              {/* Quick Save */}
+              <button
+                type="button"
+                onClick={() => save()}
+                disabled={isPending}
+                className="h-8 px-3 flex items-center justify-center border border-industrial-black bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
+                title="Guardar calibración actual (Ctrl+S)"
+              >
+                {isPending ? '💾 ...' : '💾 Guardar'}
+              </button>
+
               {/* Undo/Redo */}
               <div className="flex items-center gap-1">
                 <button
@@ -463,7 +529,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
           </div>
 
           {/* Edit mode tabs & Zoom/Fullscreen Controls */}
-          <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+          <div className="w-full flex items-center justify-between gap-4 mb-4 flex-wrap">
             <div className="flex items-center gap-1">
               {([
                 { mode: 'corners' as EditMode, label: '4 Esquinas', icon: '◇' },
@@ -502,10 +568,24 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 </button>
               )}
 
+              {/* Sidebar Toggle */}
+              <button
+                type="button"
+                onClick={() => setShowSidebar(!showSidebar)}
+                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                  !showSidebar
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
+                }`}
+                title="Mostrar u ocultar el panel de control lateral (Atajo: H)"
+              >
+                📋 {showSidebar ? 'Ocultar Panel' : 'Mostrar Panel'}
+              </button>
+
               {/* Fullscreen Toggle */}
               <button
                 type="button"
-                onClick={() => setIsFullscreen(!isFullscreen)}
+                onClick={toggleFullscreen}
                 className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
                   isFullscreen
                     ? 'bg-industrial-warning text-industrial-black border-industrial-warning'
@@ -519,13 +599,17 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
           </div>
 
           {/* Image Canvas Window */}
-          <div
-            ref={imageContainerRef}
-            className="relative w-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none"
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-          >
+          <div className={isFullscreen ? "flex-1 min-h-0 w-full flex items-center justify-center" : ""}>
+            <div
+              ref={imageContainerRef}
+              className={isFullscreen 
+                ? "relative w-auto h-auto max-w-full max-h-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none mx-auto" 
+                : "relative w-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none"
+              }
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+            >
             {/* Magnifying glass inner wrapper */}
             <div
               className="absolute inset-0 w-full h-full"
@@ -653,12 +737,14 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               })}
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
         {/* Right: Controls */}
-        <aside className="space-y-4 overflow-y-auto" style={{ maxHeight: isFullscreen ? 'calc(100vh - 4rem)' : 'calc(100vh - 8rem)' }}>
-          {/* Zones panel */}
-          <section className="bg-white border border-industrial-gray/20 p-5">
+        {showSidebar && (
+          <aside className="space-y-4 overflow-y-auto" style={{ maxHeight: isFullscreen ? 'calc(100vh - 4rem)' : 'calc(100vh - 8rem)' }}>
+            {/* Zones panel */}
+            <section className="bg-white border border-industrial-gray/20 p-5">
             <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
               Zonas bordables
             </h3>
@@ -918,6 +1004,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             )}
           </section>
         </aside>
+        )}
       </div>
     </div>
   )
