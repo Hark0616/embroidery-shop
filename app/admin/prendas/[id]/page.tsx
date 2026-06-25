@@ -122,7 +122,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                             Probar en Studio
                         </Link>
                         <Link
-                            href={`/admin/mockups/new?product_id=${product.id}`}
+                            href={`/admin/prendas/${product.id}/mockups/new`}
                             className="px-5 py-3 bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-gray"
                         >
                             Agregar mockup
@@ -223,7 +223,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                 </p>
                             </div>
                             <Link
-                                href={`/admin/mockups/new?product_id=${product.id}`}
+                                href={`/admin/prendas/${product.id}/mockups/new`}
                                 className="px-5 py-3 bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-gray"
                             >
                                 Agregar mockup
@@ -239,7 +239,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                     Agrega una foto frontal, espalda o variante de color para empezar a calibrar.
                                 </p>
                                 <Link
-                                    href={`/admin/mockups/new?product_id=${product.id}`}
+                                    href={`/admin/prendas/${product.id}/mockups/new`}
                                     className="inline-flex px-6 py-4 bg-industrial-black text-white text-xs font-bold uppercase tracking-widest hover:bg-industrial-gray"
                                 >
                                     Agregar primer mockup

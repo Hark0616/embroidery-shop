@@ -170,7 +170,7 @@ export default async function PrendasPage() {
                       <Link href={`/admin/prendas/${product.id}`} className="text-industrial-black font-bold uppercase tracking-widest text-xs hover:underline">
                         Gestionar
                       </Link>
-                      <Link href={`/admin/mockups/new?product_id=${product.id}`} className="text-industrial-gray font-bold uppercase tracking-widest text-xs hover:text-industrial-black hover:underline">
+                      <Link href={`/admin/prendas/${product.id}/mockups/new`} className="text-industrial-gray font-bold uppercase tracking-widest text-xs hover:text-industrial-black hover:underline">
                         Agregar mockup
                       </Link>
                     </div>
