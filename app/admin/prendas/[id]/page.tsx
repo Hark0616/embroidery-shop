@@ -2,7 +2,9 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BaseProduct, GarmentMockup } from '@/lib/types/database';
-import { updateProductPublication } from '@/lib/actions/products';
+import { updateProductPublication, deleteProductAction } from '@/lib/actions/products';
+import { deleteMockupAction } from '@/lib/actions/mockups';
+import DeleteButton from '@/components/admin/DeleteButton';
 
 function getSurfaceCount(mockup: GarmentMockup) {
     if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
@@ -152,6 +154,15 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                 {product.is_active ? 'Desactivar prenda' : 'Activar prenda'}
                             </button>
                         </form>
+                        <div className="mt-2">
+                            <DeleteButton
+                                action={deleteProductAction}
+                                payload={{ product_id: product.id }}
+                                confirmMessage="¿Estás seguro de que deseas eliminar esta prenda base y todos sus mockups permanentemente?"
+                                label="Eliminar Prenda"
+                                className="w-full border border-red-500 hover:bg-red-500 hover:text-white px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-red-500 transition-colors"
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -291,6 +302,15 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                                     <Link href={`/studio?product=${product.slug}`} className="text-industrial-gray font-bold uppercase tracking-widest text-xs hover:text-industrial-black hover:underline">
                                                         Vista previa
                                                     </Link>
+                                                </div>
+                                                <div className="mt-4 pt-3 border-t border-industrial-gray/10 flex justify-end">
+                                                    <DeleteButton
+                                                        action={deleteMockupAction}
+                                                        payload={{ mockup_id: mockup.id, product_id: product.id }}
+                                                        confirmMessage="¿Estás seguro de que deseas eliminar este mockup permanentemente?"
+                                                        label="Eliminar mockup"
+                                                        className="text-red-500 text-[10px] font-bold text-right uppercase tracking-widest hover:underline"
+                                                    />
                                                 </div>
                                             </div>
                                         </article>
