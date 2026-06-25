@@ -152,11 +152,31 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [saveMessage, setSaveMessage] = useState('')
   const [isPending, startTransition] = useTransition()
   const [dragPointIndex, setDragPointIndex] = useState<number | null>(null)
+  const [isZoomed, setIsZoomed] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
 
   const activeSurface = activeId ? surfaces[activeId] : null
   const normalizedActive = activeSurface ? normalizeSurface(activeSurface, DEFAULT_GRID_SIZE) : null
+
+  const meshCenter = useMemo(() => {
+    if (!normalizedActive || !normalizedActive.meshPoints || normalizedActive.meshPoints.length === 0) {
+      return { x: 50, y: 50 }
+    }
+    const pts = normalizedActive.meshPoints
+    let minX = 100, maxX = 0, minY = 100, maxY = 0
+    pts.forEach(p => {
+      if (p.x < minX) minX = p.x
+      if (p.x > maxX) maxX = p.x
+      if (p.y < minY) minY = p.y
+      if (p.y > maxY) maxY = p.y
+    })
+    return {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2
+    }
+  }, [normalizedActive])
 
   const presetSurfaces = useMemo(
     () => getPresetGroup(mockup.base_products?.product_type),
@@ -217,10 +237,21 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const handleMeshPointMove = (pointIndex: number, newPoint: CalibrationPoint) => {
     if (!normalizedActive || !activeId) return
 
+    let targetX = newPoint.x
+    let targetY = newPoint.y
+
+    if (isZoomed) {
+      const S = 2.2
+      const Ox = meshCenter.x
+      const Oy = meshCenter.y
+      targetX = Ox + (newPoint.x - Ox) / S
+      targetY = Oy + (newPoint.y - Oy) / S
+    }
+
     const newMeshPoints = [...normalizedActive.meshPoints]
     newMeshPoints[pointIndex] = {
-      x: Math.max(0, Math.min(100, Number(newPoint.x.toFixed(1)))),
-      y: Math.max(0, Math.min(100, Number(newPoint.y.toFixed(1)))),
+      x: Math.max(0, Math.min(100, Number(targetX.toFixed(1)))),
+      y: Math.max(0, Math.min(100, Number(targetY.toFixed(1)))),
     }
 
     // Track pinned points (user-moved)
@@ -384,7 +415,10 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
         ))}
       </section>
 
-      <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)] gap-6">
+      <div className={isFullscreen 
+        ? "fixed inset-0 z-[9999] bg-industrial-light p-6 grid grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)] gap-6 overflow-hidden animate-fade-in" 
+        : "grid grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)] gap-6"
+      }>
         {/* Left: Image + Overlay */}
         <section className="bg-white border border-industrial-gray/20 p-4">
           <div className="flex items-center justify-between gap-4 mb-4">
@@ -428,29 +462,63 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             </div>
           </div>
 
-          {/* Edit mode tabs */}
-          <div className="flex items-center gap-1 mb-4">
-            {([
-              { mode: 'corners' as EditMode, label: '4 Esquinas', icon: '◇' },
-              { mode: 'grid' as EditMode, label: 'Grid completo', icon: '⊞' },
-              { mode: 'preview' as EditMode, label: 'Preview', icon: '◉' },
-            ]).map(({ mode, label, icon }) => (
+          {/* Edit mode tabs & Zoom/Fullscreen Controls */}
+          <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+            <div className="flex items-center gap-1">
+              {([
+                { mode: 'corners' as EditMode, label: '4 Esquinas', icon: '◇' },
+                { mode: 'grid' as EditMode, label: 'Grid completo', icon: '⊞' },
+                { mode: 'preview' as EditMode, label: 'Preview', icon: '◉' },
+              ]).map(({ mode, label, icon }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setEditMode(mode)}
+                  className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                    editMode === mode
+                      ? 'bg-industrial-black text-white border-industrial-black'
+                      : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
+                  }`}
+                >
+                  {icon} {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Zoom Focus Toggle */}
+              {normalizedActive && (
+                <button
+                  type="button"
+                  onClick={() => setIsZoomed(!isZoomed)}
+                  className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                    isZoomed
+                      ? 'bg-blue-600 text-white border-blue-600 animate-pulse'
+                      : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
+                  }`}
+                  title="Aumentar zoom al área de la zona activa"
+                >
+                  🔍 {isZoomed ? 'Zoom: Activo (2.2x)' : 'Zoom de Zona'}
+                </button>
+              )}
+
+              {/* Fullscreen Toggle */}
               <button
-                key={mode}
                 type="button"
-                onClick={() => setEditMode(mode)}
-                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all ${
-                  editMode === mode
-                    ? 'bg-industrial-black text-white border-industrial-black'
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                  isFullscreen
+                    ? 'bg-industrial-warning text-industrial-black border-industrial-warning'
                     : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
                 }`}
+                title="Alternar pantalla completa para calibración de alta precisión"
               >
-                {icon} {label}
+                ⛶ {isFullscreen ? 'Salir Pantalla Completa' : 'Pantalla Completa'}
               </button>
-            ))}
+            </div>
           </div>
 
-          {/* Image Canvas */}
+          {/* Image Canvas Window */}
           <div
             ref={imageContainerRef}
             className="relative w-full aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10 select-none"
@@ -458,127 +526,137 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
           >
-            {/* Base mockup image */}
-            <Image
-              src={mockup.image_url}
-              alt={mockup.name}
-              fill
-              priority
-              className="object-contain"
-              draggable={false}
-            />
-
-            {/* Design overlay with mesh warp */}
-            {normalizedActive && previewDesign?.image_url && (
-              <MeshWarpOverlay
-                imageUrl={previewDesign.image_url}
-                gridSize={normalizedActive.gridSize}
-                meshPoints={normalizedActive.meshPoints}
-                opacity={normalizedActive.opacity}
-                blendMode={normalizedActive.blendMode}
-              />
-            )}
-
-            {/* Shadow map */}
-            {mockup.shadow_map_url && (
+            {/* Magnifying glass inner wrapper */}
+            <div
+              className="absolute inset-0 w-full h-full"
+              style={{
+                transform: isZoomed ? 'scale(2.2)' : 'scale(1)',
+                transformOrigin: isZoomed ? `${meshCenter.x}% ${meshCenter.y}%` : 'center',
+                transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform-origin 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            >
+              {/* Base mockup image */}
               <Image
-                src={mockup.shadow_map_url}
-                alt=""
+                src={mockup.image_url}
+                alt={mockup.name}
                 fill
-                className="object-contain mix-blend-multiply pointer-events-none"
-                style={{ opacity: shadowIntensity / 100 }}
+                priority
+                className="object-contain"
                 draggable={false}
               />
-            )}
 
-            {/* Grid lines visualization */}
-            {normalizedActive && editMode !== 'preview' && (
-              <svg className="absolute inset-0 z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {/* Draw grid lines */}
-                {Array.from({ length: normalizedActive.gridSize }).map((_, row) => (
-                  Array.from({ length: normalizedActive.gridSize - 1 }).map((_, col) => {
-                    const idx = row * normalizedActive.gridSize + col
-                    const nextIdx = idx + 1
-                    const p1 = normalizedActive.meshPoints[idx]
-                    const p2 = normalizedActive.meshPoints[nextIdx]
-                    return (
-                      <line key={`h-${row}-${col}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-                        stroke={editMode === 'corners' ? 'rgba(234,179,8,0.3)' : 'rgba(59,130,246,0.4)'}
-                        strokeWidth="0.2"
-                      />
-                    )
-                  })
-                ))}
-                {Array.from({ length: normalizedActive.gridSize - 1 }).map((_, row) => (
-                  Array.from({ length: normalizedActive.gridSize }).map((_, col) => {
-                    const idx = row * normalizedActive.gridSize + col
-                    const belowIdx = (row + 1) * normalizedActive.gridSize + col
-                    const p1 = normalizedActive.meshPoints[idx]
-                    const p2 = normalizedActive.meshPoints[belowIdx]
-                    return (
-                      <line key={`v-${row}-${col}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-                        stroke={editMode === 'corners' ? 'rgba(234,179,8,0.3)' : 'rgba(59,130,246,0.4)'}
-                        strokeWidth="0.2"
-                      />
-                    )
-                  })
-                ))}
-                {/* Outer border */}
-                {(() => {
-                  const gs = normalizedActive.gridSize
-                  const pts = normalizedActive.meshPoints
-                  const topEdge = Array.from({ length: gs }, (_, i) => pts[i])
-                  const rightEdge = Array.from({ length: gs }, (_, i) => pts[i * gs + gs - 1])
-                  const bottomEdge = Array.from({ length: gs }, (_, i) => pts[(gs - 1) * gs + i]).reverse()
-                  const leftEdge = Array.from({ length: gs }, (_, i) => pts[i * gs]).reverse()
-                  const border = [...topEdge, ...rightEdge.slice(1), ...bottomEdge.slice(1), ...leftEdge.slice(1)]
-                  const d = border.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z'
-                  return <path d={d} fill="none" stroke="#eab308" strokeWidth="0.35" strokeDasharray="1 0.8" />
-                })()}
-              </svg>
-            )}
-
-            {/* Inactive surface indicators */}
-            {Object.values(surfaces).filter(s => s.id !== activeId).map(surface => {
-              const norm = normalizeSurface(surface, DEFAULT_GRID_SIZE)
-              const corners = getCornerIndices(norm.gridSize)
-              const pts = corners.map(i => norm.meshPoints[i])
-              return (
-                <svg key={surface.id} className="absolute inset-0 z-10 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  <polygon
-                    points={pts.map(p => `${p.x},${p.y}`).join(' ')}
-                    fill="rgba(10,10,10,0.06)"
-                    stroke="rgba(10,10,10,0.2)"
-                    strokeWidth="0.3"
-                  />
-                </svg>
-              )
-            })}
-
-            {/* Draggable handles */}
-            {normalizedActive && visiblePointIndices.map(pointIndex => {
-              const point = normalizedActive.meshPoints[pointIndex]
-              const role = getPointRole(pointIndex, normalizedActive.gridSize)
-              const isPinned = normalizedActive.pinnedPoints?.includes(pointIndex) || false
-              const label = getHandleLabel(pointIndex, normalizedActive.gridSize)
-
-              return (
-                <button
-                  key={pointIndex}
-                  type="button"
-                  aria-label={label}
-                  title={label}
-                  onPointerDown={(e) => handlePointerDown(pointIndex, e)}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full cursor-grab active:cursor-grabbing transition-transform ${getHandleStyle(role, isPinned)}`}
-                  style={{ left: `${point.x}%`, top: `${point.y}%` }}
+              {/* Design overlay with mesh warp */}
+              {normalizedActive && previewDesign?.image_url && (
+                <MeshWarpOverlay
+                  imageUrl={previewDesign.image_url}
+                  gridSize={normalizedActive.gridSize}
+                  meshPoints={normalizedActive.meshPoints}
+                  opacity={normalizedActive.opacity}
+                  blendMode={normalizedActive.blendMode}
                 />
-              )
-            })}
+              )}
+
+              {/* Shadow map */}
+              {mockup.shadow_map_url && (
+                <Image
+                  src={mockup.shadow_map_url}
+                  alt=""
+                  fill
+                  className="object-contain mix-blend-multiply pointer-events-none"
+                  style={{ opacity: shadowIntensity / 100 }}
+                  draggable={false}
+                />
+              )}
+
+              {/* Grid lines visualization */}
+              {normalizedActive && editMode !== 'preview' && (
+                <svg className="absolute inset-0 z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  {/* Draw grid lines */}
+                  {Array.from({ length: normalizedActive.gridSize }).map((_, row) => (
+                    Array.from({ length: normalizedActive.gridSize - 1 }).map((_, col) => {
+                      const idx = row * normalizedActive.gridSize + col
+                      const nextIdx = idx + 1
+                      const p1 = normalizedActive.meshPoints[idx]
+                      const p2 = normalizedActive.meshPoints[nextIdx]
+                      return (
+                        <line key={`h-${row}-${col}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                          stroke={editMode === 'corners' ? 'rgba(234,179,8,0.3)' : 'rgba(59,130,246,0.4)'}
+                          strokeWidth="0.2"
+                        />
+                      )
+                    })
+                  ))}
+                  {Array.from({ length: normalizedActive.gridSize - 1 }).map((_, row) => (
+                    Array.from({ length: normalizedActive.gridSize }).map((_, col) => {
+                      const idx = row * normalizedActive.gridSize + col
+                      const belowIdx = (row + 1) * normalizedActive.gridSize + col
+                      const p1 = normalizedActive.meshPoints[idx]
+                      const p2 = normalizedActive.meshPoints[belowIdx]
+                      return (
+                        <line key={`v-${row}-${col}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                          stroke={editMode === 'corners' ? 'rgba(234,179,8,0.3)' : 'rgba(59,130,246,0.4)'}
+                          strokeWidth="0.2"
+                        />
+                      )
+                    })
+                  ))}
+                  {/* Outer border */}
+                  {(() => {
+                    const gs = normalizedActive.gridSize
+                    const pts = normalizedActive.meshPoints
+                    const topEdge = Array.from({ length: gs }, (_, i) => pts[i])
+                    const rightEdge = Array.from({ length: gs }, (_, i) => pts[i * gs + gs - 1])
+                    const bottomEdge = Array.from({ length: gs }, (_, i) => pts[(gs - 1) * gs + i]).reverse()
+                    const leftEdge = Array.from({ length: gs }, (_, i) => pts[i * gs]).reverse()
+                    const border = [...topEdge, ...rightEdge.slice(1), ...bottomEdge.slice(1), ...leftEdge.slice(1)]
+                    const d = border.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z'
+                    return <path d={d} fill="none" stroke="#eab308" strokeWidth="0.35" strokeDasharray="1 0.8" />
+                  })()}
+                </svg>
+              )}
+
+              {/* Inactive surface indicators */}
+              {Object.values(surfaces).filter(s => s.id !== activeId).map(surface => {
+                const norm = normalizeSurface(surface, DEFAULT_GRID_SIZE)
+                const corners = getCornerIndices(norm.gridSize)
+                const pts = corners.map(i => norm.meshPoints[i])
+                return (
+                  <svg key={surface.id} className="absolute inset-0 z-10 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon
+                      points={pts.map(p => `${p.x},${p.y}`).join(' ')}
+                      fill="rgba(10,10,10,0.06)"
+                      stroke="rgba(10,10,10,0.2)"
+                      strokeWidth="0.3"
+                    />
+                  </svg>
+                )
+              })}
+
+              {/* Draggable handles */}
+              {normalizedActive && visiblePointIndices.map(pointIndex => {
+                const point = normalizedActive.meshPoints[pointIndex]
+                const role = getPointRole(pointIndex, normalizedActive.gridSize)
+                const isPinned = normalizedActive.pinnedPoints?.includes(pointIndex) || false
+                const label = getHandleLabel(pointIndex, normalizedActive.gridSize)
+
+                return (
+                  <button
+                    key={pointIndex}
+                    type="button"
+                    aria-label={label}
+                    title={label}
+                    onPointerDown={(e) => handlePointerDown(pointIndex, e)}
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full cursor-grab active:cursor-grabbing transition-transform ${getHandleStyle(role, isPinned)}`}
+                    style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                  />
+                )
+              })}
+            </div>
           </div>
         </section>
 
         {/* Right: Controls */}
-        <aside className="space-y-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 8rem)' }}>
+        <aside className="space-y-4 overflow-y-auto" style={{ maxHeight: isFullscreen ? 'calc(100vh - 4rem)' : 'calc(100vh - 8rem)' }}>
           {/* Zones panel */}
           <section className="bg-white border border-industrial-gray/20 p-5">
             <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
