@@ -174,3 +174,45 @@ export async function updateProductDetails(formData: FormData) {
   revalidatePath('/catalog')
   revalidatePath('/studio')
 }
+
+export async function updateProductImage(formData: FormData) {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
+  const productId = formData.get('product_id') as string
+  const file = formData.get('image') as File
+
+  if (!productId) {
+    throw new Error('Product ID is required')
+  }
+
+  if (!file || file.size === 0) {
+    throw new Error('Image is required')
+  }
+
+  // Upload image
+  const imageUrl = await uploadImage(file, 'products')
+
+  if (!imageUrl) {
+    throw new Error('Failed to upload image')
+  }
+
+  const { error } = await supabase
+    .from('base_products')
+    .update({ image_url: imageUrl })
+    .eq('id', productId)
+
+  if (error) {
+    console.error('Error updating product image:', error)
+    throw new Error('Failed to update product image')
+  }
+
+  revalidatePath('/admin/prendas')
+  revalidatePath(`/admin/prendas/${productId}`)
+  revalidatePath('/catalog')
+  revalidatePath('/studio')
+}

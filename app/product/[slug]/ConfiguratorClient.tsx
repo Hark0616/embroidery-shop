@@ -3,9 +3,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Visualizer from '@/components/studio/Visualizer';
 import type { CalibrationSurface, GarmentMockup } from '@/lib/types/database';
-import { getPlacementsForProduct } from '@/lib/placements';
 import { COLOR_MAP } from '@/lib/colors';
 
 interface Product {
@@ -20,6 +20,14 @@ interface Product {
     garment_mockups?: GarmentMockup[];
 }
 
+interface SwitchProduct {
+    id: string;
+    name: string;
+    slug: string;
+    image_url: string;
+    base_price: number;
+}
+
 interface Design {
     id: string;
     name: string;
@@ -31,17 +39,39 @@ interface Design {
 
 interface ConfiguratorProps {
     product: Product;
+    products: SwitchProduct[];
     designs: Design[];
     leadTime: string;
 }
 
-export default function ConfiguratorClient({ product, designs, leadTime }: ConfiguratorProps) {
+interface GalleryItem {
+    type: 'base' | 'mockup';
+    imageUrl: string;
+    mockup: GarmentMockup | null;
+    hasCalibratedPlacement: boolean;
+}
+
+export default function ConfiguratorClient({ product, products, designs, leadTime }: ConfiguratorProps) {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const initialDesignId = searchParams?.get('design');
+
     // Basic Customization State
     const [selectedSize, setSelectedSize] = useState<string>(product.sizes[0] || 'M');
     const [selectedColor, setSelectedColor] = useState<string>(product.colors[0] || 'Negro');
     const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
 
-    // Mockup and Calibration logic matching Studio
+    // Sync design from URL search param if present
+    useEffect(() => {
+        if (initialDesignId) {
+            const found = designs.find(d => d.id === initialDesignId);
+            if (found) {
+                setSelectedDesign(found);
+            }
+        }
+    }, [initialDesignId, designs]);
+
+    // Mockup and Calibration logic deriving placements only from calibrated mockups
     const productMockups = useMemo(() => {
         return (product.garment_mockups || []).filter(
             m => m.is_public && m.status === 'published'
@@ -55,39 +85,6 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
         return exact.length > 0 ? exact : productMockups;
     }, [productMockups, selectedColor]);
 
-    const [selectedMockupId, setSelectedMockupId] = useState<string>('');
-
-    const selectedMockup = useMemo(() => {
-        if (visibleMockups.length === 0) return null;
-        return visibleMockups.find(mockup => mockup.id === selectedMockupId) || visibleMockups[0];
-    }, [selectedMockupId, visibleMockups]);
-
-    const calibratedSurfaces = useMemo(() => {
-        if (
-            selectedMockup?.surfaces &&
-            typeof selectedMockup.surfaces === 'object' &&
-            !Array.isArray(selectedMockup.surfaces) &&
-            Object.keys(selectedMockup.surfaces).length > 0
-        ) {
-            return selectedMockup.surfaces as Record<string, CalibrationSurface>;
-        }
-
-        // Fallback: Find another mockup of the same view that has calibrated surfaces
-        const fallbackMockup = productMockups.find(m =>
-            m.view === selectedMockup?.view &&
-            m.surfaces &&
-            typeof m.surfaces === 'object' &&
-            !Array.isArray(m.surfaces) &&
-            Object.keys(m.surfaces).length > 0
-        );
-
-        if (fallbackMockup?.surfaces) {
-            return fallbackMockup.surfaces as Record<string, CalibrationSurface>;
-        }
-
-        return null;
-    }, [selectedMockup, productMockups]);
-
     const placements = useMemo(() => {
         const allCalibrated: Record<string, any> = {};
         
@@ -99,31 +96,17 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
             ) {
                 const surfaces = mockup.surfaces as Record<string, CalibrationSurface>;
                 Object.entries(surfaces).forEach(([key, surface]) => {
-                    const stdPlacements = product.placements && Object.keys(product.placements).length > 0
-                        ? (product.placements as Record<string, any>)
-                        : getPlacementsForProduct(product.slug || '');
-                        
-                    const stdConfig = stdPlacements[key] || {};
-                    
                     allCalibrated[key] = {
-                        ...stdConfig,
                         ...surface,
-                        view: surface.view || stdConfig.view || 'front',
-                        label: surface.label || stdConfig.label || key,
+                        view: surface.view || 'front',
+                        label: surface.label || key,
                     };
                 });
             }
         });
         
-        if (Object.keys(allCalibrated).length > 0) {
-            return allCalibrated;
-        }
-
-        if (product.placements && Object.keys(product.placements).length > 0) {
-            return product.placements as Record<string, any>;
-        }
-        return getPlacementsForProduct(product.slug || '');
-    }, [productMockups, product]);
+        return allCalibrated;
+    }, [productMockups]);
 
     const [activePlacement, setActivePlacement] = useState<string>('default');
 
@@ -135,40 +118,105 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
         }
     }, [activePlacement, placements]);
 
-    // Automatically sync mockup selection with placement view and selected color
-    useEffect(() => {
-        const placementView = placements[activePlacement]?.view || 'front';
-        const matchingMockup = visibleMockups.find(
-            m => m.view === placementView
-        ) || visibleMockups[0];
+    // Gallery items combining base image and mockups sorted by active placement calibration
+    const galleryItems = useMemo(() => {
+        const items: GalleryItem[] = [];
         
-        if (matchingMockup) {
-            setSelectedMockupId(matchingMockup.id);
+        // 1. Base product image (if exists)
+        if (product.image_url) {
+            items.push({
+                type: 'base',
+                imageUrl: product.image_url,
+                mockup: null,
+                hasCalibratedPlacement: false,
+            });
         }
-    }, [activePlacement, visibleMockups, placements]);
+        
+        // 2. Mockups
+        visibleMockups.forEach(mockup => {
+            let surfaces: Record<string, CalibrationSurface> = {};
+            if (
+                mockup.surfaces &&
+                typeof mockup.surfaces === 'object' &&
+                !Array.isArray(mockup.surfaces)
+            ) {
+                surfaces = mockup.surfaces as Record<string, CalibrationSurface>;
+            }
+            const hasActivePlacement = activePlacement && surfaces[activePlacement];
+            items.push({
+                type: 'mockup',
+                imageUrl: mockup.image_url,
+                mockup,
+                hasCalibratedPlacement: !!hasActivePlacement,
+            });
+        });
+        
+        // Sort items: base image always first, then mockups with active placement calibrated, then others
+        items.sort((a, b) => {
+            if (a.type === 'base') return -1;
+            if (b.type === 'base') return 1;
+            return (b.hasCalibratedPlacement ? 1 : 0) - (a.hasCalibratedPlacement ? 1 : 0);
+        });
+        
+        return items;
+    }, [product.image_url, visibleMockups, activePlacement]);
 
-    // Derived Visualizer State
-    const activePlacementConfig = placements[activePlacement];
-    const displayX = activePlacementConfig?.x ?? 50;
-    const displayY = activePlacementConfig?.y ?? 35;
-    const displayScale = activePlacementConfig?.scale ?? 25;
-    const isBackView = activePlacementConfig?.view === 'back';
+    const [selectedGalleryIndex, setSelectedGalleryIndex] = useState<number>(0);
 
-    const colorImages = (product as any).color_images as Record<string, string> | undefined;
-    const currentBaseImage = selectedMockup?.image_url || (
-        (isBackView && (product as any).back_image_url)
-            ? (product as any).back_image_url
-            : (colorImages?.[selectedColor] || product.image_url)
-    );
-    // Find shadow map fallback from another mockup of the same view if the active mockup does not have one
-    const fallbackShadowMap = useMemo(() => {
-        if (!selectedMockup) return null;
-        const match = productMockups.find(m => m.view === selectedMockup.view && m.shadow_map_url);
-        return match?.shadow_map_url || null;
-    }, [selectedMockup, productMockups]);
+    // Keep gallery index in bounds
+    useEffect(() => {
+        if (selectedGalleryIndex >= galleryItems.length) {
+            setSelectedGalleryIndex(0);
+        }
+    }, [galleryItems, selectedGalleryIndex]);
 
-    const currentTextureMap = selectedMockup?.shadow_map_url || fallbackShadowMap || (product as any).texture_map_url;
-    const activeCalibratedSurface = calibratedSurfaces?.[activePlacement] || null;
+    // Automatically select the first mockup that has the active placement calibrated when placement changes
+    useEffect(() => {
+        const firstCalibratedIdx = galleryItems.findIndex(
+            item => item.type === 'mockup' && item.hasCalibratedPlacement
+        );
+        if (firstCalibratedIdx !== -1) {
+            setSelectedGalleryIndex(firstCalibratedIdx);
+        } else if (galleryItems.length > 0) {
+            setSelectedGalleryIndex(0);
+        }
+    }, [activePlacement, galleryItems]);
+
+    const activeItem = galleryItems[selectedGalleryIndex] || galleryItems[0] || null;
+    const currentMockup = activeItem?.type === 'mockup' ? activeItem.mockup : null;
+
+    const activeCalibratedSurface = useMemo(() => {
+        if (!currentMockup) return null;
+        
+        let surfaces: Record<string, CalibrationSurface> = {};
+        if (
+            currentMockup.surfaces &&
+            typeof currentMockup.surfaces === 'object' &&
+            !Array.isArray(currentMockup.surfaces)
+        ) {
+            surfaces = currentMockup.surfaces as Record<string, CalibrationSurface>;
+        }
+        
+        if (surfaces[activePlacement]) {
+            return surfaces[activePlacement];
+        }
+        
+        // Fallback: Find another mockup of the same view that has calibrated surfaces for this placement
+        const fallbackMockup = productMockups.find(m =>
+            m.view === currentMockup.view &&
+            m.surfaces &&
+            typeof m.surfaces === 'object' &&
+            !Array.isArray(m.surfaces) &&
+            (m.surfaces as Record<string, CalibrationSurface>)[activePlacement]
+        );
+        
+        if (fallbackMockup?.surfaces) {
+            const fallbackSurfaces = fallbackMockup.surfaces as Record<string, CalibrationSurface>;
+            return fallbackSurfaces[activePlacement] || null;
+        }
+        
+        return null;
+    }, [currentMockup, activePlacement, productMockups]);
 
     const placementOptions = useMemo(() => Object.entries(placements).map(([key, config]) => ({
         id: key,
@@ -176,150 +224,171 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
         value: key
     })), [placements]);
 
+    // Rendering design logic
+    const shouldRenderDesign = useMemo(() => {
+        if (placementOptions.length === 0) {
+            return true; // 2D fallback when no mockups are calibrated
+        }
+        return !!activeCalibratedSurface;
+    }, [placementOptions.length, activeCalibratedSurface]);
+
+    const designImageToRender = shouldRenderDesign ? selectedDesign?.image_url : undefined;
+
+    // Fallback coordinates for 2D render
+    const displayX = 50;
+    const displayY = 35;
+    const displayScale = 25;
+    const rotation = 0;
+    const rotateX = 0;
+    const rotateY = 0;
+
+    // Shadow Map logic
+    const fallbackShadowMap = useMemo(() => {
+        if (!currentMockup) return null;
+        const match = productMockups.find(m => m.view === currentMockup.view && m.shadow_map_url);
+        return match?.shadow_map_url || null;
+    }, [currentMockup, productMockups]);
+
+    const currentTextureMap = currentMockup?.shadow_map_url || fallbackShadowMap || undefined;
+
     // Pricing
     const totalPrice = product.base_price + (selectedDesign?.price_modifier || 0);
 
-    // WhatsApp Generator
+    // WhatsApp Link
     const generateWhatsAppLink = () => {
         const phone = '573013732290';
-        const placementLabel = placements[activePlacement]?.label || 'Por defecto';
+        const placementLabel = placements[activePlacement]?.label || 'Estándar (2D Centrado)';
         const message = `Hola, quiero pedir:
-    - Producto: ${product.name}
-    - Talla: ${selectedSize}
-    - Color: ${selectedColor}
-    - Ubicación: ${placementLabel}
-    - Diseño: ${selectedDesign ? selectedDesign.name : 'Sin Diseño'}
-    
-    Precio Total Estimado: $${totalPrice.toLocaleString()}
-    
-    Entiendo que el tiempo de espera es de: ${leadTime}`;
+- Producto: ${product.name}
+- Talla: ${selectedSize}
+- Color: ${selectedColor}
+- Ubicación: ${placementLabel}
+- Diseño: ${selectedDesign ? selectedDesign.name : 'Sin Diseño'}
+
+Precio Total Estimado: $${totalPrice.toLocaleString()} COP
+
+Entiendo que el tiempo de espera es de: ${leadTime}`;
 
         return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     };
 
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[calc(100vh-64px)]">
+    const handleGarmentChange = (slug: string) => {
+        const params = new URLSearchParams();
+        if (selectedDesign) {
+            params.set('design', selectedDesign.id);
+        }
+        router.push(`/product/${slug}?${params.toString()}`);
+    };
 
-            {/* LEFT: Visualizer */}
-            <div className="relative lg:col-span-7 h-[50vh] lg:h-auto bg-industrial-light flex items-center justify-center p-8 overflow-hidden">
-                <div className="w-full max-w-md aspect-[4/5] shadow-2xl bg-white relative">
-                    <Visualizer
-                        productImage={currentBaseImage}
-                        textureMapImage={currentTextureMap}
-                        designImage={selectedDesign?.image_url}
-                        productName={product.name}
-                        designName={selectedDesign?.name}
-                        positionX={displayX}
-                        positionY={displayY}
-                        designScale={displayScale}
-                        rotation={activePlacementConfig?.rotateZ ?? 0}
-                        rotateX={activePlacementConfig?.rotateX ?? 0}
-                        rotateY={activePlacementConfig?.rotateY ?? 0}
-                        isAdminMode={false}
-                        calibratedSurface={activeCalibratedSurface}
-                    />
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-7xl mx-auto px-4 py-8 md:px-8 md:py-12 min-h-[calc(100vh-64px)]">
+            {/* LEFT COLUMN: Gallery & Preview */}
+            <div className="lg:col-span-7 flex flex-col md:flex-row gap-4">
+                {/* Thumbnails strip */}
+                {galleryItems.length > 1 && (
+                    <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:w-20 w-full shrink-0 pb-2 md:pb-0 scrollbar-none max-h-[600px]">
+                        {galleryItems.map((item, index) => {
+                            const isActive = index === selectedGalleryIndex;
+                            return (
+                                <button
+                                    key={index}
+                                    onClick={() => setSelectedGalleryIndex(index)}
+                                    className={`relative flex-shrink-0 w-16 h-20 md:w-20 md:h-24 bg-white border-2 rounded-lg overflow-hidden transition-all duration-200 hover:scale-[1.03]
+                                    ${isActive 
+                                        ? 'border-industrial-black ring-1 ring-industrial-black' 
+                                        : 'border-gray-200 hover:border-gray-400'}`}
+                                >
+                                    <div className="relative w-full h-full bg-gray-50">
+                                        <Image
+                                            src={item.imageUrl}
+                                            alt={`Vista ${index + 1}`}
+                                            fill
+                                            sizes="80px"
+                                            className="object-contain p-1"
+                                        />
+                                    </div>
+                                    {item.hasCalibratedPlacement && (
+                                        <span className="absolute top-1 right-1 text-[10px] text-industrial-black bg-industrial-warning rounded-full w-4 h-4 flex items-center justify-center font-bold shadow" title="Ubicación calibrada disponible">
+                                            ✦
+                                        </span>
+                                    )}
+                                    {item.type === 'base' && (
+                                        <span className="absolute bottom-0 left-0 right-0 bg-gray-100/90 text-gray-500 text-[8px] font-mono text-center uppercase tracking-tighter py-0.5 border-t border-gray-200">
+                                            Prenda
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+                
+                {/* Main preview */}
+                <div className="flex-1 aspect-[4/5] bg-industrial-light border border-gray-100 rounded-xl overflow-hidden shadow-sm relative flex items-center justify-center p-4">
+                    <div className="w-full h-full relative">
+                        <Visualizer
+                            productImage={activeItem?.imageUrl || product.image_url}
+                            textureMapImage={currentTextureMap}
+                            designImage={designImageToRender}
+                            productName={product.name}
+                            designName={selectedDesign?.name}
+                            positionX={displayX}
+                            positionY={displayY}
+                            designScale={displayScale}
+                            rotation={rotation}
+                            rotateX={rotateX}
+                            rotateY={rotateY}
+                            isAdminMode={false}
+                            calibratedSurface={activeCalibratedSurface}
+                        />
+                    </div>
+                    {/* Helper overlay when design is not rendered on this mockup */}
+                    {!shouldRenderDesign && selectedDesign && (
+                        <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-sm border border-gray-200/50 p-2.5 rounded-lg text-center shadow-lg transition-all duration-300">
+                            <p className="text-[11px] font-medium text-gray-600">
+                                Vista de referencia. El diseño se bordará en: <span className="font-bold text-industrial-black">{placements[activePlacement]?.label || activePlacement}</span>
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* RIGHT: Controls */}
-            <div className="p-8 lg:p-16 lg:col-span-5 flex flex-col h-full bg-white overflow-y-auto">
+            {/* RIGHT COLUMN: Controls */}
+            <div className="lg:col-span-5 flex flex-col h-full bg-white">
                 <div className="mb-auto">
                     <Link href="/catalog" className="text-xs font-bold uppercase tracking-widest text-industrial-gray hover:text-industrial-black mb-6 block">
                         ← Volver al Catálogo
                     </Link>
 
-                    <h1 className="font-heading font-black text-4xl lg:text-5xl uppercase tracking-tighter mb-2">
+                    <h1 className="font-heading font-black text-3xl lg:text-4xl uppercase tracking-tighter mb-2">
                         {product.name}
                     </h1>
-                    <p className="font-mono text-xl text-industrial-black mb-12">
+                    <p className="font-mono text-2xl text-industrial-black mb-8">
                         ${totalPrice.toLocaleString()} <span className="text-sm text-gray-400">COP</span>
                     </p>
 
-                    {/* Placements */}
-                    {placementOptions.length > 0 && (
-                        <div className="mb-10">
-                            <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">Ubicación del Bordado</h3>
-                            <div className="flex flex-wrap gap-2">
-                                {placementOptions.map(opt => (
-                                    <button
-                                        key={opt.id}
-                                        onClick={() => setActivePlacement(opt.value)}
-                                        className={`px-4 py-3 border text-sm font-bold uppercase transition-all
-                                    ${activePlacement === opt.value
-                                                ? 'border-industrial-black bg-industrial-black text-white'
-                                                : 'border-gray-200 text-gray-500 hover:border-industrial-black'}`}
-                                    >
-                                        {opt.name}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Sizes */}
+                    {/* 1. Selector de Diseño */}
                     <div className="mb-10">
-                        <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">Selecciona Talla</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {product.sizes.map(size => (
-                                <button
-                                    key={size}
-                                    onClick={() => setSelectedSize(size)}
-                                    className={`w-12 h-12 flex items-center justify-center border text-sm font-bold transition-all
-                                ${selectedSize === size
-                                            ? 'border-industrial-black bg-industrial-black text-white'
-                                            : 'border-gray-200 text-gray-500 hover:border-industrial-black'}`}
-                                >
-                                    {size}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Colors */}
-                    <div className="mb-10">
-                        <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">Color Base</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {product.colors.map(color => {
-                                const hex = COLOR_MAP[color];
-                                return (
-                                    <button
-                                        key={color}
-                                        onClick={() => setSelectedColor(color)}
-                                        className={`flex items-center gap-2 px-3 py-2 border text-xs font-mono uppercase tracking-widest transition-all
-                                            ${selectedColor === color
-                                                ? 'border-industrial-black bg-industrial-black text-white'
-                                                : 'border-gray-200 text-gray-500 hover:border-industrial-black bg-white'}`}
-                                        title={color}
-                                    >
-                                        {hex && (
-                                            <span 
-                                                className="w-3.5 h-3.5 rounded-full border border-gray-300 inline-block"
-                                                style={{ backgroundColor: hex }}
-                                            />
-                                        )}
-                                        {color}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Designs */}
-                    <div className="mb-12">
-                        <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">
-                            Selecciona Diseño {selectedDesign && <span className="text-industrial-black normal-case">- {selectedDesign.name} (+${selectedDesign.price_modifier})</span>}
+                        <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray flex items-center justify-between">
+                            <span>1. Diseño Seleccionado</span>
+                            {selectedDesign && (
+                                <span className="text-industrial-black normal-case font-mono">
+                                    {selectedDesign.name} (+${selectedDesign.price_modifier.toLocaleString()} COP)
+                                </span>
+                            )}
                         </h3>
-
                         {designs.length === 0 ? (
                             <p className="text-sm text-gray-400 font-mono">No hay diseños disponibles.</p>
                         ) : (
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid grid-cols-4 gap-2 max-h-[220px] overflow-y-auto pr-1">
                                 <button
                                     onClick={() => setSelectedDesign(null)}
-                                    className={`aspect-square border flex flex-col items-center justify-center p-2 transition-all
-                                ${selectedDesign === null ? 'border-industrial-black ring-1 ring-industrial-black' : 'border-gray-200 hover:border-industrial-gray'}`}
+                                    className={`aspect-square border flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200
+                                    ${selectedDesign === null 
+                                        ? 'border-industrial-black bg-industrial-black text-white' 
+                                        : 'border-gray-200 hover:border-industrial-black text-gray-500 bg-white'}`}
                                 >
-                                    <span className="text-2xl mb-1">✕</span>
+                                    <span className="text-xl mb-1">✕</span>
                                     <span className="text-[10px] font-bold uppercase text-center leading-none">Sin Diseño</span>
                                 </button>
 
@@ -327,28 +396,164 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
                                     <button
                                         key={design.id}
                                         onClick={() => setSelectedDesign(design)}
-                                        className={`aspect-square border relative p-2 transition-all overflow-hidden
-                                    ${selectedDesign?.id === design.id ? 'border-industrial-warning ring-2 ring-industrial-warning' : 'border-gray-200 hover:border-industrial-gray'}`}
+                                        className={`aspect-square border relative p-1 rounded-lg transition-all duration-200 overflow-hidden bg-white
+                                        ${selectedDesign?.id === design.id 
+                                            ? 'border-industrial-warning ring-2 ring-industrial-warning bg-industrial-warning/5' 
+                                            : 'border-gray-200 hover:border-industrial-gray'}`}
+                                        title={design.name}
                                     >
                                         <div className="relative w-full h-full">
                                             <Image
                                                 src={design.image_url}
                                                 alt={design.name}
                                                 fill
-                                                className="object-contain"
+                                                sizes="80px"
+                                                className="object-contain p-1"
                                             />
                                         </div>
+                                        {selectedDesign?.id === design.id && (
+                                            <div className="absolute top-1 right-1 w-4 h-4 bg-industrial-warning rounded-full flex items-center justify-center shadow-sm">
+                                                <span className="text-[9px] font-bold text-industrial-black">✓</span>
+                                            </div>
+                                        )}
                                     </button>
                                 ))}
                             </div>
                         )}
                     </div>
+
+                    {/* 2. Tipo de Prenda */}
+                    {products.length > 1 && (
+                        <div className="mb-10">
+                            <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">
+                                2. Tipo de Prenda
+                            </h3>
+                            <div className="flex flex-wrap gap-2">
+                                {products.map(p => {
+                                    const isCurrent = p.slug === product.slug;
+                                    return (
+                                        <button
+                                            key={p.id}
+                                            onClick={() => handleGarmentChange(p.slug)}
+                                            className={`flex items-center gap-3 px-4 py-3 border rounded-lg text-sm font-bold uppercase transition-all duration-200
+                                            ${isCurrent
+                                                ? 'border-industrial-black bg-industrial-black text-white shadow-md'
+                                                : 'border-gray-200 text-gray-500 hover:border-industrial-black bg-white hover:text-industrial-black'}`}
+                                        >
+                                            <div className="relative w-6 h-6 shrink-0 opacity-85">
+                                                {p.image_url ? (
+                                                    <Image
+                                                        src={p.image_url}
+                                                        alt={p.name}
+                                                        fill
+                                                        sizes="24px"
+                                                        className={`object-contain ${isCurrent ? 'brightness-0 invert' : ''}`}
+                                                    />
+                                                ) : (
+                                                    <span className="text-sm">👕</span>
+                                                )}
+                                            </div>
+                                            <span>{p.name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 3. Color Base */}
+                    <div className="mb-10">
+                        <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">
+                            3. Color Base: <span className="text-industrial-black normal-case font-bold">{selectedColor}</span>
+                        </h3>
+                        <div className="flex flex-wrap gap-3">
+                            {product.colors.map(color => {
+                                const hex = COLOR_MAP[color];
+                                const isSelected = selectedColor === color;
+                                return (
+                                    <button
+                                        key={color}
+                                        onClick={() => setSelectedColor(color)}
+                                        className={`group relative flex items-center justify-center w-10 h-10 rounded-full border transition-all duration-300
+                                            ${isSelected
+                                                ? 'border-industrial-black ring-2 ring-industrial-black/20 scale-105'
+                                                : 'border-gray-200 hover:border-industrial-black hover:scale-105 bg-white'}`}
+                                        title={color}
+                                    >
+                                        {hex ? (
+                                            <span 
+                                                className="w-8 h-8 rounded-full border border-gray-150 shadow-inner inline-block"
+                                                style={{ backgroundColor: hex }}
+                                            />
+                                        ) : (
+                                            <span className="text-[10px] font-mono leading-none">{color.slice(0, 2)}</span>
+                                        )}
+                                        {isSelected && (
+                                            <span className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 bg-industrial-black text-white text-[8px] font-bold px-1 rounded-sm uppercase tracking-tighter shadow-sm">
+                                                ok
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* 4. Ubicación del Bordado */}
+                    {placementOptions.length > 0 && (
+                        <div className="mb-10">
+                            <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">
+                                4. Ubicación del Bordado
+                            </h3>
+                            <div className="flex flex-wrap gap-2">
+                                {placementOptions.map(opt => {
+                                    const isSelected = activePlacement === opt.value;
+                                    return (
+                                        <button
+                                            key={opt.id}
+                                            onClick={() => setActivePlacement(opt.value)}
+                                            className={`px-4 py-2.5 border rounded-lg text-sm font-bold uppercase transition-all duration-200
+                                            ${isSelected
+                                                ? 'border-industrial-black bg-industrial-black text-white shadow-md'
+                                                : 'border-gray-200 text-gray-500 hover:border-industrial-black bg-white hover:text-industrial-black'}`}
+                                        >
+                                            {opt.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 5. Selecciona Talla */}
+                    <div className="mb-10">
+                        <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">
+                            5. Selecciona Talla
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                            {product.sizes.map(size => {
+                                const isSelected = selectedSize === size;
+                                return (
+                                    <button
+                                        key={size}
+                                        onClick={() => setSelectedSize(size)}
+                                        className={`w-12 h-12 flex items-center justify-center border rounded-lg text-sm font-bold transition-all duration-200
+                                        ${isSelected
+                                            ? 'border-industrial-black bg-industrial-black text-white shadow-md'
+                                            : 'border-gray-200 text-gray-500 hover:border-industrial-black bg-white hover:text-industrial-black'}`}
+                                    >
+                                        {size}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Action Bar */}
-                <div className="pt-8 border-t border-gray-100">
-                    <div className="bg-industrial-warning/10 p-4 mb-6 rounded-sm border border-industrial-warning/20">
-                        <p className="text-xs text-industrial-black/80 font-mono text-center uppercase">
+                <div className="pt-6 border-t border-gray-100">
+                    <div className="bg-industrial-warning/10 p-4 mb-6 rounded-lg border border-industrial-warning/20">
+                        <p className="text-xs text-industrial-black/80 font-mono text-center uppercase tracking-wider">
                             ⚠ Tiempo de producción: {leadTime}
                         </p>
                     </div>
@@ -357,12 +562,12 @@ export default function ConfiguratorClient({ product, designs, leadTime }: Confi
                         href={generateWhatsAppLink()}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full block bg-industrial-black text-industrial-warning font-black text-center py-5 uppercase tracking-widest text-lg hover:bg-gray-900 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                        className="w-full block bg-industrial-black text-industrial-warning font-black text-center py-5 rounded-lg uppercase tracking-widest text-base hover:bg-gray-900 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-lg"
                     >
                         Comprar por WhatsApp — ${totalPrice.toLocaleString()}
                     </a>
                     <p className="text-center text-[10px] text-gray-400 mt-4 uppercase tracking-wider">
-                        Serás redirigido a WhatsApp para confirmar los detalles.
+                        Serás redirigido a WhatsApp para confirmar los detalles del pedido.
                     </p>
                 </div>
             </div>

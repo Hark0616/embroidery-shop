@@ -40,13 +40,21 @@ export default async function ProductPage({ params }: { params: { slug: string }
         .eq('is_active', true)
         .order('name');
 
-    // 3. Fetch Lead Time
+    // 3. Fetch All Active Base Products (for switching garments)
+    const { data: allProducts } = await supabase!
+        .from('base_products')
+        .select('id, name, slug, image_url, base_price')
+        .eq('is_active', true)
+        .order('name');
+
+    // 4. Fetch Lead Time
     const leadTime = await getDeliveryTime();
 
     return (
         <div className="min-h-screen bg-white">
             <ConfiguratorClient
                 product={product}
+                products={allProducts || []}
                 designs={designs || []}
                 leadTime={leadTime}
             />

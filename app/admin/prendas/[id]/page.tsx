@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BaseProduct, GarmentMockup } from '@/lib/types/database';
-import { updateProductPublication, deleteProductAction, updateProductDetails } from '@/lib/actions/products';
+import { updateProductPublication, deleteProductAction, updateProductDetails, updateProductImage } from '@/lib/actions/products';
 import { deleteMockupAction } from '@/lib/actions/mockups';
 import DeleteButton from '@/components/admin/DeleteButton';
 import { COLOR_DATABASE } from '@/lib/colors';
@@ -171,7 +171,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
             <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
                 <aside className="space-y-6">
                     <section className="bg-white border border-industrial-gray/20 p-5">
-                        <div className="aspect-[4/5] max-w-[240px] mx-auto bg-gray-100 border border-industrial-gray/10 overflow-hidden mb-5">
+                        <div className="aspect-[4/5] max-w-[240px] mx-auto bg-gray-100 border border-industrial-gray/10 overflow-hidden mb-4">
                             {displayImage ? (
                                 <img src={displayImage} alt={product.name} className="w-full h-full object-contain" />
                             ) : (
@@ -180,6 +180,39 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                 </div>
                             )}
                         </div>
+
+                        {product.image_url && displayImage !== product.image_url && (
+                            <div className="mb-4 bg-gray-50 p-2 border border-gray-100 flex items-center gap-3 rounded-lg">
+                                <div className="w-12 h-16 relative bg-white border border-gray-250 overflow-hidden flex-shrink-0">
+                                    <img src={product.image_url} alt="Base" className="w-full h-full object-contain" />
+                                </div>
+                                <div>
+                                    <p className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">Imagen base actual</p>
+                                    <p className="text-[10px] text-gray-500 leading-tight">Esta es la foto de la prenda sin diseño.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <form action={updateProductImage} className="mb-6 border-b border-industrial-gray/10 pb-6 space-y-2">
+                            <input type="hidden" name="product_id" value={product.id} />
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray">
+                                Cambiar Imagen Base
+                            </label>
+                            <input
+                                type="file"
+                                name="image"
+                                accept="image/*"
+                                required
+                                className="w-full bg-industrial-light border border-industrial-gray/20 p-1.5 text-[10px] font-mono outline-none cursor-pointer"
+                            />
+                            <button
+                                type="submit"
+                                className="w-full bg-industrial-black text-white hover:bg-industrial-warning hover:text-industrial-black py-2 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-sm"
+                            >
+                                Actualizar Imagen
+                            </button>
+                        </form>
+
                         <div className="space-y-4">
                             <div>
                                 <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">Precio base</p>

@@ -9,7 +9,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { applyMoodTheme } from '@/lib/theme';
-import { getPlacementsForProduct } from '@/lib/placements';
 import { uploadCustomDesign } from '@/lib/supabase/storage';
 import { COLOR_MAP } from '@/lib/colors';
 
@@ -127,31 +126,17 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             ) {
                 const surfaces = mockup.surfaces as Record<string, CalibrationSurface>;
                 Object.entries(surfaces).forEach(([key, surface]) => {
-                    const stdPlacements = selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0
-                        ? (selectedProduct.placements as Record<string, any>)
-                        : getPlacementsForProduct(selectedProduct?.slug || '');
-                        
-                    const stdConfig = stdPlacements[key] || {};
-                    
                     allCalibrated[key] = {
-                        ...stdConfig,
                         ...surface,
-                        view: surface.view || stdConfig.view || 'front',
-                        label: surface.label || stdConfig.label || key,
+                        view: surface.view || 'front',
+                        label: surface.label || key,
                     };
                 });
             }
         });
         
-        if (Object.keys(allCalibrated).length > 0) {
-            return allCalibrated;
-        }
-
-        if (selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0) {
-            return selectedProduct.placements as Record<string, any>;
-        }
-        return getPlacementsForProduct(selectedProduct?.slug || '');
-    }, [productMockups, selectedProduct]);
+        return allCalibrated;
+    }, [productMockups]);
 
     // Automatically sync mockup selection with placement view and selected color
     useEffect(() => {
@@ -736,15 +721,17 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     </div>
                                 )}
                                 
-                                <OptionSelector
-                                    label="Ubicación del Bordado"
-                                    items={placementOptions}
-                                    selectedId={activePlacement}
-                                    onSelect={(id) => {
-                                        setActivePlacement(id);
-                                    }}
-                                    type="list"
-                                />
+                                {placementOptions.length > 0 && (
+                                    <OptionSelector
+                                        label="Ubicación del Bordado"
+                                        items={placementOptions}
+                                        selectedId={activePlacement}
+                                        onSelect={(id) => {
+                                            setActivePlacement(id);
+                                        }}
+                                        type="list"
+                                    />
+                                )}
 
                                 <OptionSelector
                                     label="Color de la Prenda"
@@ -771,7 +758,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                                 />
                             </motion.div>
                         ) : (
-                            renderStepHeader('details', `Detalles: ${placements[activePlacement]?.label} / ${selectedColor}`, handleValidation(), '3')
+                            renderStepHeader('details', `Detalles: ${(placements[activePlacement]?.label || (placementOptions.length > 0 ? 'Bordado' : 'Estándar'))} / ${selectedColor}`, handleValidation(), '3')
                         )}
                     </div>
                 )}
