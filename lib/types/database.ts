@@ -326,5 +326,6 @@ export type CalibrationSurface = {
   pinnedPoints?: number[]
 
   opacity?: number
+  shadowOpacity?: number
   blendMode?: 'normal' | 'multiply' | 'overlay'
 }

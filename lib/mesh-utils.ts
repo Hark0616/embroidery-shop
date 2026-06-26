@@ -77,6 +77,7 @@ export function createMeshSurface(
     meshPoints,
     pinnedPoints: [],
     opacity: 0.94,
+    shadowOpacity: 0.7,
     blendMode: 'multiply',
   }
 }
@@ -168,7 +169,10 @@ export function normalizeSurface(
     surface.meshPoints &&
     surface.meshPoints.length === surface.gridSize * surface.gridSize
   ) {
-    return surface as CalibrationSurface & {
+    return {
+      ...surface,
+      shadowOpacity: surface.shadowOpacity ?? 0.7,
+    } as CalibrationSurface & {
       type: 'mesh'
       gridSize: number
       meshPoints: CalibrationPoint[]
@@ -186,6 +190,7 @@ export function normalizeSurface(
       gridSize,
       meshPoints,
       pinnedPoints: surface.pinnedPoints || [],
+      shadowOpacity: surface.shadowOpacity ?? 0.7,
     }
   }
 
@@ -205,6 +210,7 @@ export function normalizeSurface(
     gridSize,
     meshPoints,
     pinnedPoints: [],
+    shadowOpacity: surface.shadowOpacity ?? 0.7,
   }
 }
 

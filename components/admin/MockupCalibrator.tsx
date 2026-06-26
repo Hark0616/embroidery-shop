@@ -155,7 +155,6 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [previewDesignId, setPreviewDesignId] = useState(designs[0]?.id || '')
   const [previewVariantId, setPreviewVariantId] = useState(mockupVariants[0]?.id || '')
   const [isPublic, setIsPublic] = useState(mockup.is_public)
-  const [shadowIntensity, setShadowIntensity] = useState(70)
   const [saveMessage, setSaveMessage] = useState('')
   const [isPending, startTransition] = useTransition()
   const [dragPointIndex, setDragPointIndex] = useState<number | null>(null)
@@ -227,6 +226,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
   const activeSurface = activeId ? surfaces[activeId] : null
   const normalizedActive = activeSurface ? normalizeSurface(activeSurface, DEFAULT_GRID_SIZE) : null
+  const shadowIntensity = Math.round((normalizedActive?.shadowOpacity ?? 0.7) * 100)
 
   // Stable zoom origin to prevent cursor feedback loop when dragging points while zoomed in
   useEffect(() => {
@@ -1010,7 +1010,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                       min="0"
                       max="100"
                       value={shadowIntensity}
-                      onChange={e => setShadowIntensity(Number(e.target.value))}
+                      onChange={e => updateActiveSurface(s => ({ ...s, shadowOpacity: Number(e.target.value) / 100 }))}
                       className="w-full accent-yellow-500"
                     />
                   </label>
