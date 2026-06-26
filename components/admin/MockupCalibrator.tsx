@@ -464,7 +464,11 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
           status: nextStatus,
           isPublic: nextIsPublic,
         })
-        setSaveMessage(`✓ Guardado como ${result.status}.`)
+        setSaveMessage(
+          nextIsPublic
+            ? `✓ Publicado. Ya puede aparecer en Studio público.`
+            : `✓ Guardado privado. Para verlo en Studio público usa "Publicar mockup".`,
+        )
       } catch (error) {
         setSaveMessage(error instanceof Error ? error.message : 'No se pudo guardar.')
       }
@@ -546,9 +550,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 onClick={() => save()}
                 disabled={isPending}
                 className="h-8 px-3 flex items-center justify-center border border-industrial-black bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
-                title="Guardar calibración actual (Ctrl+S)"
+                title={isPublic ? 'Guardar cambios del mockup publicado (Ctrl+S)' : 'Guardar calibración privada (Ctrl+S)'}
               >
-                {isPending ? '💾 ...' : '💾 Guardar'}
+                {isPending ? '💾 ...' : isPublic ? '💾 Guardar publicado' : '💾 Guardar privado'}
               </button>
 
               {/* Undo/Redo */}

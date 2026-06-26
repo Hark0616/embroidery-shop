@@ -31,6 +31,7 @@ interface VisualizerProps {
     threadFilter?: string;
     placementId?: string;
     calibratedSurface?: CalibrationSurface | null;
+    allowFallbackPlacement?: boolean;
 }
 
 export default function Visualizer({ 
@@ -50,7 +51,8 @@ export default function Visualizer({
     onAdminUpdate,
     threadFilter = 'none',
     placementId,
-    calibratedSurface = null
+    calibratedSurface = null,
+    allowFallbackPlacement = true
 }: VisualizerProps) {
     const [isZoomed, setIsZoomed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -165,7 +167,7 @@ export default function Visualizer({
                                     blendMode={calibratedSurface.blendMode}
                                     filter={threadFilter === 'none' ? undefined : threadFilter}
                                 />
-                            ) : designImage && productImage ? (
+                            ) : designImage && productImage && allowFallbackPlacement ? (
                                 <motion.div
                                     key={isAdminMode ? `admin-${placementId || 'default'}` : designImage}
                                     initial={{ opacity: 0, scale: 0.8 }}

@@ -52,6 +52,15 @@ interface GalleryItem {
     hasCalibratedPlacement: boolean;
 }
 
+function hasCalibratedSurfaces(mockup: GarmentMockup) {
+    return !!(
+        mockup.surfaces &&
+        typeof mockup.surfaces === 'object' &&
+        !Array.isArray(mockup.surfaces) &&
+        Object.keys(mockup.surfaces).length > 0
+    );
+}
+
 export default function ConfiguratorClient({ product, products, designs, leadTime }: ConfiguratorProps) {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -75,7 +84,7 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
     // Mockup and Calibration logic deriving placements only from calibrated mockups
     const productMockups = useMemo(() => {
         return (product.garment_mockups || []).filter(
-            m => m.is_public && m.status === 'published'
+            m => m.is_public && m.status === 'published' && hasCalibratedSurfaces(m)
         );
     }, [product.garment_mockups]);
 
@@ -120,8 +129,8 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
     const galleryItems = useMemo(() => {
         const items: GalleryItem[] = [];
         
-        // 1. Base product image (if exists)
-        if (product.image_url) {
+        // 1. Base product image only when there are no calibrated mockups yet.
+        if (product.image_url && visibleMockups.length === 0) {
             items.push({
                 type: 'base',
                 imageUrl: product.image_url,
@@ -149,7 +158,7 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
             });
         });
         
-        // Sort items: base image always first, then mockups with active placement calibrated, then others
+        // Sort items: calibrated mockups first; base image is only a no-mockup fallback.
         items.sort((a, b) => {
             if (a.type === 'base') return -1;
             if (b.type === 'base') return 1;
@@ -224,11 +233,8 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
 
     // Rendering design logic
     const shouldRenderDesign = useMemo(() => {
-        if (placementOptions.length === 0) {
-            return true; // 2D fallback when no mockups are calibrated
-        }
-        return !!activeCalibratedSurface;
-    }, [placementOptions.length, activeCalibratedSurface]);
+        return !!currentMockup && !!activeCalibratedSurface;
+    }, [currentMockup, activeCalibratedSurface]);
 
     const designImageToRender = shouldRenderDesign ? selectedDesign?.image_url : undefined;
 
@@ -338,6 +344,7 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                             rotateY={rotateY}
                             isAdminMode={false}
                             calibratedSurface={activeCalibratedSurface}
+                            allowFallbackPlacement={false}
                         />
                     </div>
                     {/* Helper overlay when design is not rendered on this mockup */}

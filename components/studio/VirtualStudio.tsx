@@ -29,6 +29,15 @@ const THREAD_COLORS = [
     { id: 'negro', name: 'Negro', css: 'grayscale(1) brightness(0)' },
 ];
 
+function hasCalibratedSurfaces(mockup: GarmentMockup) {
+    return !!(
+        mockup.surfaces &&
+        typeof mockup.surfaces === 'object' &&
+        !Array.isArray(mockup.surfaces) &&
+        Object.keys(mockup.surfaces).length > 0
+    );
+}
+
 export default function VirtualStudio({ products, designs, mockups = [] }: VirtualStudioProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -75,7 +84,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
 
     const productMockups = useMemo(() => {
         if (!selectedProduct) return [];
-        return mockups.filter(mockup => mockup.product_id === selectedProduct.id);
+        return mockups.filter(mockup => mockup.product_id === selectedProduct.id && hasCalibratedSurfaces(mockup));
     }, [mockups, selectedProduct]);
 
     const visibleMockups = useMemo(() => {
@@ -303,11 +312,7 @@ Hola, quiero ordenar este bordado personalizado.`;
     const activeCalibratedSurface = calibratedSurfaces?.[activePlacement] || null;
 
     const colorImages = selectedProduct?.color_images as Record<string, string> | undefined;
-    const currentBaseImage = selectedMockup ? getMockupImageForColor(selectedMockup, selectedColor) : (
-        (isBackView && selectedProduct?.back_image_url)
-            ? selectedProduct.back_image_url
-            : (colorImages?.[selectedColor] || selectedProduct?.image_url)
-    );
+    const currentBaseImage = selectedMockup ? getMockupImageForColor(selectedMockup, selectedColor) : null;
     // Find shadow map fallback from another mockup of the same view if the active mockup does not have one
     const fallbackShadowMap = useMemo(() => {
         if (!selectedMockup) return null;
@@ -316,6 +321,10 @@ Hola, quiero ordenar este bordado personalizado.`;
     }, [selectedMockup, productMockups, selectedColor]);
 
     const currentTextureMap = getMockupShadowForColor(selectedMockup, selectedColor) || fallbackShadowMap || selectedProduct?.texture_map_url;
+    const designImageForPreview = activeCalibratedSurface
+        ? (isCustomUpload ? customPreviewUrl : selectedDesign?.image_url)
+        : undefined;
+    const missingPublishedMockups = !!selectedProduct && productMockups.length === 0;
 
     // Memoize options
     const productOptions = useMemo(() => products.map(p => ({
@@ -400,7 +409,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                 <Visualizer
                     productImage={currentBaseImage}
                     textureMapImage={currentTextureMap}
-                    designImage={isCustomUpload ? customPreviewUrl : selectedDesign?.image_url}
+                    designImage={designImageForPreview}
                     productName={selectedProduct?.name}
                     designName={isCustomUpload ? customDesignName : selectedDesign?.name}
                     positionX={displayX}
@@ -412,7 +421,18 @@ Hola, quiero ordenar este bordado personalizado.`;
                     isAdminMode={false}
                     threadFilter={THREAD_COLORS.find(t => t.id === selectedThread)?.css || 'none'}
                     calibratedSurface={activeCalibratedSurface}
+                    allowFallbackPlacement={false}
                 />
+                {missingPublishedMockups && (
+                    <div className="mt-3 border border-industrial-warning bg-industrial-warning/10 p-4">
+                        <p className="font-bold text-xs uppercase tracking-widest text-industrial-black">
+                            Esta prenda aun no tiene mockups publicados
+                        </p>
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mt-1">
+                            Publica al menos un mockup calibrado para que aparezca aqui.
+                        </p>
+                    </div>
+                )}
             </div>
 
             {/* RIGHT: Controls */}
