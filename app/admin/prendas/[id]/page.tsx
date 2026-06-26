@@ -6,6 +6,7 @@ import { updateProductPublication, deleteProductAction, updateProductDetails, up
 import { deleteMockupAction } from '@/lib/actions/mockups';
 import DeleteButton from '@/components/admin/DeleteButton';
 import { COLOR_DATABASE } from '@/lib/colors';
+import { getMockupImageForColor, getMockupVariants } from '@/lib/mockup-variants';
 
 function getSurfaceCount(mockup: GarmentMockup) {
     if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
@@ -96,7 +97,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
     const calibratedCount = productMockups.filter(mockup => getSurfaceCount(mockup) > 0).length;
     const publishedCount = productMockups.filter(mockup => mockup.is_public && mockup.status === 'published').length;
     const firstMockup = productMockups.find(m => m.is_public && m.status === 'published') || productMockups[0];
-    const displayImage = firstMockup?.image_url || product.image_url;
+    const displayImage = firstMockup ? getMockupImageForColor(firstMockup) : product.image_url;
 
     return (
         <div className="p-8 bg-industrial-light min-h-screen">
@@ -429,18 +430,20 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                 {productMockups.map((mockup) => {
                                     const status = getMockupStatus(mockup);
                                     const surfaceCount = getSurfaceCount(mockup);
+                                    const variants = getMockupVariants(mockup);
+                                    const previewImage = getMockupImageForColor(mockup);
 
                                     return (
                                         <article key={mockup.id} className="border border-industrial-gray/20 bg-white overflow-hidden">
                                             <div className="aspect-[4/5] bg-gray-100 border-b border-industrial-gray/10">
-                                                <img src={mockup.image_url} alt={mockup.name} className="w-full h-full object-contain" />
+                                                <img src={previewImage} alt={mockup.name} className="w-full h-full object-contain" />
                                             </div>
                                             <div className="p-4">
                                                 <div className="flex items-start justify-between gap-3 mb-3">
                                                     <div>
                                                         <h3 className="font-bold text-sm uppercase tracking-tight">{mockup.name}</h3>
                                                         <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest mt-1">
-                                                            {mockup.view}{mockup.color_name ? ` / ${mockup.color_name}` : ''}
+                                                            {mockup.view} / {variants.length} color{variants.length === 1 ? '' : 'es'}
                                                         </p>
                                                     </div>
                                                     <span className={`inline-block px-2 py-1 text-[9px] uppercase tracking-widest font-bold border whitespace-nowrap ${status.className}`}>
@@ -450,6 +453,18 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                                 <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest mb-4">
                                                     {surfaceCount} zona{surfaceCount === 1 ? '' : 's'} calibrada{surfaceCount === 1 ? '' : 's'}
                                                 </p>
+                                                {variants.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5 mb-4">
+                                                        {variants.map(variant => (
+                                                            <span
+                                                                key={variant.id}
+                                                                className="border border-industrial-gray/10 px-2 py-1 text-[9px] font-mono uppercase tracking-widest"
+                                                            >
+                                                                {variant.colorName || 'Base'}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center justify-between gap-3">
                                                     <Link href={`/admin/mockups/${mockup.id}`} className="text-industrial-black font-bold uppercase tracking-widest text-xs hover:underline">
                                                         Calibrar

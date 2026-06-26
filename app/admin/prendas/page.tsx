@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import type { BaseProduct } from '@/lib/types/database'
+import { getMockupImageForColor } from '@/lib/mockup-variants'
 
 type MockupSummary = {
   id: string
@@ -8,6 +9,9 @@ type MockupSummary = {
   is_public: boolean
   surfaces: unknown
   image_url?: string
+  color_name?: string | null
+  shadow_map_url?: string | null
+  variants?: unknown
 }
 
 type ProductWithMockups = BaseProduct & {
@@ -87,7 +91,7 @@ export default async function PrendasPage() {
   const supabase = await createClient()
   const { data: products } = await supabase
     ?.from('base_products')
-    .select('*, garment_mockups(id, status, is_public, surfaces, image_url)')
+    .select('*, garment_mockups(id, status, is_public, surfaces, image_url, color_name, shadow_map_url, variants)')
     .order('created_at', { ascending: false }) || { data: [] }
 
   return (
@@ -132,7 +136,7 @@ export default async function PrendasPage() {
             {products?.map((product: ProductWithMockups) => {
               const workflow = getWorkflowState(product)
               const firstMockup = product.garment_mockups?.find(m => m.is_public && m.status === 'published') || product.garment_mockups?.[0]
-              const displayImage = firstMockup?.image_url || product.image_url
+              const displayImage = firstMockup ? getMockupImageForColor(firstMockup as any) : product.image_url
 
               return (
                 <tr key={product.id} className="hover:bg-industrial-light/50 transition-colors">

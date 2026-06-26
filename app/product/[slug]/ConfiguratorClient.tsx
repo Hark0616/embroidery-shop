@@ -7,6 +7,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Visualizer from '@/components/studio/Visualizer';
 import type { CalibrationSurface, GarmentMockup } from '@/lib/types/database';
 import { COLOR_MAP } from '@/lib/colors';
+import { getMockupImageForColor, getMockupShadowForColor } from '@/lib/mockup-variants';
 
 interface Product {
     id: string;
@@ -79,11 +80,8 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
     }, [product.garment_mockups]);
 
     const visibleMockups = useMemo(() => {
-        if (!selectedColor) return productMockups;
-        const normalizedColor = selectedColor.toLowerCase();
-        const exact = productMockups.filter(mockup => mockup.color_name?.toLowerCase() === normalizedColor);
-        return exact.length > 0 ? exact : productMockups;
-    }, [productMockups, selectedColor]);
+        return productMockups;
+    }, [productMockups]);
 
     const placements = useMemo(() => {
         const allCalibrated: Record<string, any> = {};
@@ -145,7 +143,7 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
             const hasActivePlacement = activePlacement && surfaces[activePlacement];
             items.push({
                 type: 'mockup',
-                imageUrl: mockup.image_url,
+                imageUrl: getMockupImageForColor(mockup, selectedColor),
                 mockup,
                 hasCalibratedPlacement: !!hasActivePlacement,
             });
@@ -159,7 +157,7 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
         });
         
         return items;
-    }, [product.image_url, visibleMockups, activePlacement]);
+    }, [product.image_url, visibleMockups, activePlacement, selectedColor]);
 
     const [selectedGalleryIndex, setSelectedGalleryIndex] = useState<number>(0);
 
@@ -245,11 +243,11 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
     // Shadow Map logic
     const fallbackShadowMap = useMemo(() => {
         if (!currentMockup) return null;
-        const match = productMockups.find(m => m.view === currentMockup.view && m.shadow_map_url);
-        return match?.shadow_map_url || null;
-    }, [currentMockup, productMockups]);
+        const match = productMockups.find(m => m.view === currentMockup.view && getMockupShadowForColor(m, selectedColor));
+        return match ? getMockupShadowForColor(match, selectedColor) : null;
+    }, [currentMockup, productMockups, selectedColor]);
 
-    const currentTextureMap = currentMockup?.shadow_map_url || fallbackShadowMap || undefined;
+    const currentTextureMap = getMockupShadowForColor(currentMockup, selectedColor) || fallbackShadowMap || undefined;
 
     // Pricing
     const totalPrice = product.base_price + (selectedDesign?.price_modifier || 0);

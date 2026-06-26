@@ -34,7 +34,7 @@ export default async function NewGarmentMockupPage({ params }: { params: { id: s
             {product.name}
           </h1>
           <p className="font-mono text-xs text-industrial-gray mt-2 uppercase tracking-widest">
-            Sube una vista real. Despues de crearla iras directo a calibrar sus zonas bordables.
+            Crea una vista/pose y sube sus versiones por color. Todas compartiran una sola calibracion.
           </p>
         </div>
 
@@ -44,14 +44,14 @@ export default async function NewGarmentMockupPage({ params }: { params: { id: s
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-              Nombre del mockup
+              Nombre del grupo de mockup
             </label>
             <input
               name="name"
               type="text"
               required
               className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-              placeholder={`Ej: ${product.name} negro frente`}
+              placeholder={`Ej: Mockup 1 frente`}
             />
           </div>
 
@@ -67,8 +67,7 @@ export default async function NewGarmentMockupPage({ params }: { params: { id: s
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+          <div>
               <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
                 Vista
               </label>
@@ -81,49 +80,50 @@ export default async function NewGarmentMockupPage({ params }: { params: { id: s
                 <option value="side">Lateral</option>
                 <option value="detail">Detalle</option>
               </select>
-            </div>
+          </div>
 
+          {product.colors && product.colors.length > 0 ? (
+            <div>
+              <input type="hidden" name="variant_count" value={product.colors.length} />
+              <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-3">
+                Imagenes por color
+              </label>
+              <div className="space-y-3">
+                {product.colors.map((color: string, index: number) => (
+                  <div key={color} className="border border-industrial-gray/20 p-4">
+                    <input type="hidden" name={`variant_color_${index}`} value={color} />
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-black mb-2">
+                      {color}
+                    </label>
+                    <input
+                      name={`variant_image_${index}`}
+                      type="file"
+                      accept="image/*"
+                      required
+                      className="w-full text-sm font-mono text-industrial-gray file:mr-4 file:py-2 file:px-4 file:border-0 file:text-xs file:font-bold file:bg-industrial-black file:text-white hover:file:bg-industrial-gray"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-500 mt-3">
+                Usa el mismo encuadre para todos los colores. La calibracion se hara una sola vez y se aplicara a todo el grupo.
+              </p>
+            </div>
+          ) : (
             <div>
               <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-                Color / variante
+                Imagen del mockup
               </label>
-              {product.colors && product.colors.length > 0 ? (
-                <select
-                  name="color_name"
-                  required
-                  className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-                >
-                  <option value="">Seleccionar color...</option>
-                  {product.colors.map((color: string) => (
-                    <option key={color} value={color}>
-                      {color}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  name="color_name"
-                  type="text"
-                  className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-                  placeholder="Negro, Blanco, Beige..."
-                />
-              )}
+              <input
+                name="image"
+                type="file"
+                accept="image/*"
+                required
+                className="w-full text-sm font-mono text-industrial-gray file:mr-4 file:py-2 file:px-4 file:border-0 file:text-xs file:font-bold file:bg-industrial-black file:text-white hover:file:bg-industrial-gray"
+              />
+              <p className="text-[10px] text-gray-500 mt-2">Recomendado: 1600x2000px.</p>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-              Imagen del mockup
-            </label>
-            <input
-              name="image"
-              type="file"
-              accept="image/*"
-              required
-              className="w-full text-sm font-mono text-industrial-gray file:mr-4 file:py-2 file:px-4 file:border-0 file:text-xs file:font-bold file:bg-industrial-black file:text-white hover:file:bg-industrial-gray"
-            />
-            <p className="text-[10px] text-gray-500 mt-2">Recomendado: 1600x2000px, mismo encuadre para variantes.</p>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">

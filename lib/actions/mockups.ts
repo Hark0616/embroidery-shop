@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
 import { uploadImage } from './storage'
-import type { CalibrationSurface } from '@/lib/types/database'
+import type { CalibrationSurface, MockupVariant } from '@/lib/types/database'
 
 type MockupStatus = 'draft' | 'needs_calibration' | 'calibrated' | 'published'
 
@@ -34,24 +34,63 @@ export async function createMockup(formData: FormData) {
   const file = formData.get('image') as File
   const shadowFile = formData.get('shadow_map') as File | null
   const redirectTo = formData.get('redirect_to') as string | null
+  const variantCount = Number(formData.get('variant_count') || 0)
 
   if (!productId || !name) {
     throw new Error('Product and name are required')
-  }
-
-  if (!file || file.size === 0) {
-    throw new Error('Mockup image is required')
-  }
-
-  const imageUrl = await uploadImage(file, 'products', 'mockups')
-  if (!imageUrl) {
-    throw new Error('Failed to upload mockup image')
   }
 
   let shadowMapUrl: string | null = null
   if (shadowFile && shadowFile.size > 0) {
     shadowMapUrl = await uploadImage(shadowFile, 'products', 'mockup-shadows')
   }
+
+  const variants: MockupVariant[] = []
+
+  if (variantCount > 0) {
+    for (let index = 0; index < variantCount; index += 1) {
+      const variantColor = formData.get(`variant_color_${index}`) as string
+      const variantFile = formData.get(`variant_image_${index}`) as File
+
+      if (!variantFile || variantFile.size === 0) {
+        continue
+      }
+
+      const variantImageUrl = await uploadImage(variantFile, 'products', 'mockups')
+      if (!variantImageUrl) {
+        throw new Error(`Failed to upload mockup image for ${variantColor || `variant ${index + 1}`}`)
+      }
+
+      variants.push({
+        id: slugify(variantColor || `variante-${index + 1}`),
+        colorName: variantColor || null,
+        imageUrl: variantImageUrl,
+        shadowMapUrl,
+        isPrimary: variants.length === 0,
+      })
+    }
+  }
+
+  if (variants.length === 0) {
+    if (!file || file.size === 0) {
+      throw new Error('Mockup image is required')
+    }
+
+    const imageUrl = await uploadImage(file, 'products', 'mockups')
+    if (!imageUrl) {
+      throw new Error('Failed to upload mockup image')
+    }
+
+    variants.push({
+      id: slugify(colorName || 'default'),
+      colorName,
+      imageUrl,
+      shadowMapUrl,
+      isPrimary: true,
+    })
+  }
+
+  const primaryVariant = variants[0]
 
   const slug = slugify(rawSlug || name)
 
@@ -60,9 +99,10 @@ export async function createMockup(formData: FormData) {
     name,
     slug,
     view,
-    color_name: colorName,
-    image_url: imageUrl,
+    color_name: primaryVariant.colorName,
+    image_url: primaryVariant.imageUrl,
     shadow_map_url: shadowMapUrl,
+    variants,
     status: 'needs_calibration',
     is_public: false,
     surfaces: {},

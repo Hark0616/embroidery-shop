@@ -172,6 +172,7 @@ export interface Database {
           color_name: string | null
           image_url: string
           shadow_map_url: string | null
+          variants: Json
           status: 'draft' | 'needs_calibration' | 'calibrated' | 'published'
           is_public: boolean
           surfaces: Json
@@ -188,6 +189,7 @@ export interface Database {
           color_name?: string | null
           image_url: string
           shadow_map_url?: string | null
+          variants?: Json
           status?: 'draft' | 'needs_calibration' | 'calibrated' | 'published'
           is_public?: boolean
           surfaces?: Json
@@ -204,6 +206,7 @@ export interface Database {
           color_name?: string | null
           image_url?: string
           shadow_map_url?: string | null
+          variants?: Json
           status?: 'draft' | 'needs_calibration' | 'calibrated' | 'published'
           is_public?: boolean
           surfaces?: Json
@@ -283,6 +286,14 @@ export type ProductUpdate = Database['public']['Tables']['products']['Update']
 export type BaseProduct = Database['public']['Tables']['base_products']['Row']
 export type EmbroideryDesign = Database['public']['Tables']['embroidery_designs']['Row']
 export type GarmentMockup = Database['public']['Tables']['garment_mockups']['Row']
+
+export type MockupVariant = {
+  id: string
+  colorName: string | null
+  imageUrl: string
+  shadowMapUrl?: string | null
+  isPrimary?: boolean
+}
 
 export type CalibrationPoint = {
   x: number

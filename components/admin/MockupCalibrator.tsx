@@ -13,6 +13,7 @@ import {
   normalizeSurface,
   reinterpolateFromCorners,
 } from '@/lib/mesh-utils'
+import { getMockupVariants } from '@/lib/mockup-variants'
 
 type SurfaceMap = Record<string, CalibrationSurface>
 type EditMode = 'corners' | 'grid' | 'preview'
@@ -144,6 +145,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   }, [mockup.surfaces])
 
   const initialActiveId = Object.keys(initialSurfaces)[0] || ''
+  const mockupVariants = useMemo(() => getMockupVariants(mockup), [mockup])
 
   const history = useHistory({ surfaces: initialSurfaces, activeId: initialActiveId })
   const { surfaces, activeId } = history.state
@@ -151,6 +153,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [editMode, setEditMode] = useState<EditMode>('corners')
   const [draftLabel, setDraftLabel] = useState('Pecho centro')
   const [previewDesignId, setPreviewDesignId] = useState(designs[0]?.id || '')
+  const [previewVariantId, setPreviewVariantId] = useState(mockupVariants[0]?.id || '')
   const [isPublic, setIsPublic] = useState(mockup.is_public)
   const [shadowIntensity, setShadowIntensity] = useState(70)
   const [saveMessage, setSaveMessage] = useState('')
@@ -162,6 +165,19 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 })
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
+
+  const previewVariant = useMemo(
+    () => mockupVariants.find(variant => variant.id === previewVariantId) || mockupVariants[0],
+    [mockupVariants, previewVariantId],
+  )
+  const previewMockupImage = previewVariant?.imageUrl || mockup.image_url
+  const previewShadowMap = previewVariant?.shadowMapUrl || mockup.shadow_map_url
+
+  useEffect(() => {
+    if (mockupVariants.length > 0 && !mockupVariants.some(variant => variant.id === previewVariantId)) {
+      setPreviewVariantId(mockupVariants[0].id)
+    }
+  }, [mockupVariants, previewVariantId])
 
   // Synchronize fullscreen state with browser native fullscreen
   useEffect(() => {
@@ -566,6 +582,35 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             </div>
           </div>
 
+          {mockupVariants.length > 1 && (
+            <div className="w-full border border-industrial-gray/10 bg-gray-50 p-3 mb-4">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-2">
+                Visualizar color del mockup
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {mockupVariants.map(variant => (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() => setPreviewVariantId(variant.id)}
+                    className={`flex-shrink-0 border px-3 py-2 text-left transition-colors ${
+                      previewVariant?.id === variant.id
+                        ? 'border-industrial-black bg-industrial-black text-white'
+                        : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
+                    }`}
+                  >
+                    <span className="block font-bold text-[10px] uppercase tracking-widest">
+                      {variant.colorName || 'Base'}
+                    </span>
+                    <span className="block font-mono text-[9px] uppercase tracking-widest opacity-60 mt-1">
+                      Misma calibracion
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Edit mode tabs & Zoom/Fullscreen Controls */}
           <div className="w-full flex items-center justify-between gap-4 mb-4 flex-wrap">
             <div className="flex items-center gap-1">
@@ -659,7 +704,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             >
               {/* Base mockup image */}
               <Image
-                src={mockup.image_url}
+                src={previewMockupImage}
                 alt={mockup.name}
                 fill
                 priority
@@ -679,9 +724,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               )}
 
               {/* Shadow map */}
-              {mockup.shadow_map_url && (
+              {previewShadowMap && (
                 <Image
-                  src={mockup.shadow_map_url}
+                  src={previewShadowMap}
                   alt=""
                   fill
                   className="object-contain mix-blend-multiply pointer-events-none"
@@ -951,7 +996,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 </div>
 
                 {/* Shadow map intensity */}
-                {mockup.shadow_map_url && (
+                {previewShadowMap && (
                   <label className="block">
                     <span className="block font-bold text-xs uppercase tracking-widest mb-2">
                       Intensidad de sombras — {shadowIntensity}%

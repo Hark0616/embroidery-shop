@@ -11,6 +11,7 @@ import Image from 'next/image';
 import { applyMoodTheme } from '@/lib/theme';
 import { uploadCustomDesign } from '@/lib/supabase/storage';
 import { COLOR_MAP } from '@/lib/colors';
+import { getMockupImageForColor, getMockupShadowForColor } from '@/lib/mockup-variants';
 
 interface VirtualStudioProps {
     products: BaseProduct[];
@@ -78,11 +79,8 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     }, [mockups, selectedProduct]);
 
     const visibleMockups = useMemo(() => {
-        if (!selectedColor) return productMockups;
-        const normalizedColor = selectedColor.toLowerCase();
-        const exact = productMockups.filter(mockup => mockup.color_name?.toLowerCase() === normalizedColor);
-        return exact.length > 0 ? exact : productMockups;
-    }, [productMockups, selectedColor]);
+        return productMockups;
+    }, [productMockups]);
 
     const selectedMockup = useMemo(() => {
         if (visibleMockups.length === 0) return null;
@@ -305,7 +303,7 @@ Hola, quiero ordenar este bordado personalizado.`;
     const activeCalibratedSurface = calibratedSurfaces?.[activePlacement] || null;
 
     const colorImages = selectedProduct?.color_images as Record<string, string> | undefined;
-    const currentBaseImage = selectedMockup?.image_url || (
+    const currentBaseImage = selectedMockup ? getMockupImageForColor(selectedMockup, selectedColor) : (
         (isBackView && selectedProduct?.back_image_url)
             ? selectedProduct.back_image_url
             : (colorImages?.[selectedColor] || selectedProduct?.image_url)
@@ -313,11 +311,11 @@ Hola, quiero ordenar este bordado personalizado.`;
     // Find shadow map fallback from another mockup of the same view if the active mockup does not have one
     const fallbackShadowMap = useMemo(() => {
         if (!selectedMockup) return null;
-        const match = productMockups.find(m => m.view === selectedMockup.view && m.shadow_map_url);
-        return match?.shadow_map_url || null;
-    }, [selectedMockup, productMockups]);
+        const match = productMockups.find(m => m.view === selectedMockup.view && getMockupShadowForColor(m, selectedColor));
+        return match ? getMockupShadowForColor(match, selectedColor) : null;
+    }, [selectedMockup, productMockups, selectedColor]);
 
-    const currentTextureMap = selectedMockup?.shadow_map_url || fallbackShadowMap || selectedProduct?.texture_map_url;
+    const currentTextureMap = getMockupShadowForColor(selectedMockup, selectedColor) || fallbackShadowMap || selectedProduct?.texture_map_url;
 
     // Memoize options
     const productOptions = useMemo(() => products.map(p => ({
@@ -710,7 +708,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                                                     }`}
                                                 >
                                                     <div className="relative w-full aspect-[4/5] bg-gray-50 mb-2 overflow-hidden">
-                                                        <Image src={mockup.image_url} alt={mockup.name} fill className="object-contain" sizes="96px" />
+                                                        <Image src={getMockupImageForColor(mockup, selectedColor)} alt={mockup.name} fill className="object-contain" sizes="96px" />
                                                     </div>
                                                     <span className="block font-bold text-[9px] uppercase tracking-tight leading-tight">
                                                         {mockup.name}
