@@ -301,7 +301,6 @@ Hola, quiero ordenar este bordado personalizado.`;
     const designImageForPreview = activeCalibratedSurface
         ? (isCustomUpload ? customPreviewUrl : selectedDesign?.image_url)
         : undefined;
-    const missingPublishedMockups = !!selectedProduct && productMockups.length === 0;
 
     // Memoize options
     const productOptions = useMemo(() => products.map(p => ({
@@ -340,7 +339,7 @@ Hola, quiero ordenar este bordado personalizado.`;
 
     const activePlacementLabel = activeCalibratedSurface
         ? (placements[activePlacement]?.label || activePlacement)
-        : 'Sin calibracion';
+        : 'Ubicación';
 
     const isComplete = handleValidation() && (!isCustomUpload || (!isUploadingLogo && !!uploadedLogoUrl));
 
@@ -398,16 +397,6 @@ Hola, quiero ordenar este bordado personalizado.`;
                     calibratedSurface={activeCalibratedSurface}
                     allowFallbackPlacement={false}
                 />
-                {missingPublishedMockups && (
-                    <div className="mt-3 border border-industrial-warning bg-industrial-warning/10 p-4">
-                        <p className="font-bold text-xs uppercase tracking-widest text-industrial-black">
-                            Esta prenda aun no tiene mockups calibrados publicados
-                        </p>
-                        <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mt-1">
-                            Sin una superficie calibrada no se muestra ningun bordado en esta prenda.
-                        </p>
-                    </div>
-                )}
             </div>
 
             {/* RIGHT: Controls */}
@@ -684,36 +673,6 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     Personaliza Detalles
                                 </h3>
 
-                                {visibleMockups.length > 1 && (
-                                    <div className="mb-8">
-                                        <h3 className="font-heading font-bold text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
-                                            Mockup de vista
-                                            <span className="text-industrial-warning text-[10px] ml-auto font-normal normal-case opacity-50">Preview</span>
-                                        </h3>
-                                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                                            {visibleMockups.map(mockup => (
-                                                <button
-                                                    key={mockup.id}
-                                                    type="button"
-                                                    onClick={() => setSelectedMockupId(mockup.id)}
-                                                    className={`flex-shrink-0 w-24 border p-2 text-left transition-all ${
-                                                        selectedMockup?.id === mockup.id
-                                                            ? 'border-industrial-black bg-industrial-black text-white'
-                                                            : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
-                                                    }`}
-                                                >
-                                                    <div className="relative w-full aspect-[4/5] bg-gray-50 mb-2 overflow-hidden">
-                                                        <Image src={getMockupImageForColor(mockup, selectedColor)} alt={mockup.name} fill className="object-contain" sizes="96px" />
-                                                    </div>
-                                                    <span className="block font-bold text-[9px] uppercase tracking-tight leading-tight">
-                                                        {mockup.name}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                
                                 {placementOptions.length > 0 && (
                                     <OptionSelector
                                         label="Ubicación del Bordado"
@@ -724,17 +683,6 @@ Hola, quiero ordenar este bordado personalizado.`;
                                         }}
                                         type="list"
                                     />
-                                )}
-
-                                {!activeCalibratedSurface && (
-                                    <div className="border border-industrial-warning bg-industrial-warning/10 p-4">
-                                        <p className="font-bold text-xs uppercase tracking-widest text-industrial-black">
-                                            Falta mockup calibrado
-                                        </p>
-                                        <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mt-1">
-                                            Esta prenda no puede venderse desde Studio hasta publicar una superficie calibrada para este mockup.
-                                        </p>
-                                    </div>
                                 )}
 
                                 <OptionSelector
@@ -775,9 +723,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                                 ? 'Subiendo tu logo...' 
                                 : isComplete 
                                     ? 'Enviar Ficha a Producción' 
-                                    : !activeCalibratedSurface
-                                        ? 'Falta mockup calibrado'
-                                        : 'Completa tu selección'}
+                                    : 'Completa tu selección'}
                         </span>
                     </button>
                     {isComplete && (

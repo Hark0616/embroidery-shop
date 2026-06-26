@@ -311,13 +311,6 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                             allowFallbackPlacement={false}
                         />
                     </div>
-                    {!canCheckout && (
-                        <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-sm border border-gray-200/50 p-2.5 rounded-lg text-center shadow-lg transition-all duration-300">
-                            <p className="text-[11px] font-medium text-gray-600">
-                                Esta prenda aun no tiene un mockup calibrado publicado para venderse en linea.
-                            </p>
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -493,17 +486,6 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                         </div>
                     )}
 
-                    {placementOptions.length === 0 && (
-                        <div className="mb-10 rounded-lg border border-industrial-warning/30 bg-industrial-warning/10 p-4">
-                            <p className="text-xs font-black uppercase tracking-widest text-industrial-black">
-                                Falta mockup calibrado
-                            </p>
-                            <p className="mt-2 text-[11px] font-mono uppercase tracking-wider text-industrial-gray">
-                                Publica al menos un mockup calibrado para activar la compra de esta prenda.
-                            </p>
-                        </div>
-                    )}
-
                     {/* 5. Selecciona Talla */}
                     <div className="mb-10">
                         <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">
@@ -553,12 +535,12 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         }`}
                     >
-                        {canCheckout ? `Comprar por WhatsApp — $${totalPrice.toLocaleString()}` : 'Falta mockup calibrado'}
+                        {canCheckout ? `Comprar por WhatsApp — $${totalPrice.toLocaleString()}` : 'No disponible'}
                     </a>
                     <p className="text-center text-[10px] text-gray-400 mt-4 uppercase tracking-wider">
                         {canCheckout
                             ? 'Serás redirigido a WhatsApp para confirmar los detalles del pedido.'
-                            : 'Esta prenda debe calibrarse y publicarse antes de recibir pedidos.'}
+                            : 'Estamos preparando esta opción.'}
                     </p>
                 </div>
             </div>
