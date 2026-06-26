@@ -7,13 +7,12 @@ import { deleteMockupAction } from '@/lib/actions/mockups';
 import DeleteButton from '@/components/admin/DeleteButton';
 import { COLOR_DATABASE } from '@/lib/colors';
 import { getMockupImageForColor, getMockupVariants } from '@/lib/mockup-variants';
+import { getGarmentReadiness, hasCalibratedSurface } from '@/lib/admin/readiness';
 
 function getSurfaceCount(mockup: GarmentMockup) {
-    if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
-        return 0;
-    }
-
-    return Object.keys(mockup.surfaces).length;
+    return hasCalibratedSurface(mockup.surfaces) && mockup.surfaces && typeof mockup.surfaces === 'object' && !Array.isArray(mockup.surfaces)
+        ? Object.keys(mockup.surfaces).length
+        : 0;
 }
 
 function getMockupStatus(mockup: GarmentMockup) {
@@ -38,34 +37,6 @@ function getMockupStatus(mockup: GarmentMockup) {
         className: 'border-red-300 text-red-700 bg-red-50',
     };
 }
-
-function getProductReadiness(product: BaseProduct, mockups: GarmentMockup[]) {
-    const calibratedCount = mockups.filter(mockup => getSurfaceCount(mockup) > 0).length;
-    const publishedCount = mockups.filter(mockup => mockup.is_public && mockup.status === 'published').length;
-
-    if (product.is_active) {
-        return {
-            label: 'Publicada',
-            detail: 'La prenda está activa en la tienda.',
-            className: 'border-green-500 text-green-700 bg-green-50',
-        };
-    }
-
-    if (publishedCount > 0) {
-        return {
-            label: 'Listo para activar',
-            detail: 'Tiene mockups listos. Falta activar la prenda.',
-            className: 'border-industrial-warning text-industrial-black bg-industrial-warning/10',
-        };
-    }
-
-    return {
-        label: 'Borrador',
-        detail: 'Falta activar la prenda para mostrarla en tienda.',
-        className: 'border-gray-300 text-gray-500 bg-gray-50',
-    };
-}
-
 
 export default async function EditPrendaPage({ params }: { params: { id: string } }) {
     const supabase = await createClient();
@@ -93,7 +64,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
     }
 
     const productMockups = (mockups || []) as GarmentMockup[];
-    const readiness = getProductReadiness(product as BaseProduct, productMockups);
+    const readiness = getGarmentReadiness(product as BaseProduct, productMockups);
     const calibratedCount = productMockups.filter(mockup => getSurfaceCount(mockup) > 0).length;
     const publishedCount = productMockups.filter(mockup => mockup.is_public && mockup.status === 'published').length;
     const firstMockup = productMockups.find(m => m.is_public && m.status === 'published') || productMockups[0];
@@ -142,11 +113,20 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                             <input type="hidden" name="intent" value={product.is_active ? 'deactivate' : 'activate'} />
                             <button
                                 type="submit"
-                                className="w-full border border-current px-3 py-2 text-[10px] font-bold uppercase tracking-widest"
+                                disabled={!product.is_active && !readiness.canActivate}
+                                className="w-full border border-current px-3 py-2 text-[10px] font-bold uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {product.is_active ? 'Desactivar prenda' : 'Activar prenda'}
                             </button>
                         </form>
+                        {!product.is_active && !readiness.canActivate && (
+                            <Link
+                                href={productMockups[0] ? `/admin/mockups/${productMockups[0].id}?from_product=${product.id}` : `/admin/prendas/${product.id}/mockups/new`}
+                                className="block mt-2 w-full border border-current px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest"
+                            >
+                                {productMockups[0] ? 'Calibrar mockup' : 'Agregar mockup'}
+                            </Link>
+                        )}
                         <div className="mt-2">
                             <DeleteButton
                                 action={deleteProductAction}

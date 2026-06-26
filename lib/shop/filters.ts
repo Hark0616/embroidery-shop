@@ -9,17 +9,13 @@ export function normalizeShopFilter(value: string | string[] | null | undefined)
 
 export function buildShopHref({
   drop,
-  tag,
 }: {
   drop?: string | null
-  tag?: string | null
 }) {
   const params = new URLSearchParams()
   const normalizedDrop = normalizeShopFilter(drop)
-  const normalizedTag = normalizeShopFilter(tag)
 
   if (normalizedDrop) params.set('drop', normalizedDrop)
-  if (normalizedTag) params.set('tag', normalizedTag)
 
   const query = params.toString()
   return query ? `/shop?${query}` : '/shop'

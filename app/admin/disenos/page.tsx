@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { updateDesignStatus } from '@/lib/actions/designs'
+import { isMoodCategoryCompatible } from '@/lib/moods/catalog'
 
 export default async function DisenosPage() {
   const supabase = await createClient()
@@ -41,6 +43,7 @@ export default async function DisenosPage() {
               <th className="px-6 py-4 font-normal">Categoría</th>
               <th className="px-6 py-4 font-normal text-right">Precio Extra</th>
               <th className="px-6 py-4 font-normal text-center">Estado</th>
+              <th className="px-6 py-4 font-normal text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-industrial-gray/10">
@@ -60,7 +63,11 @@ export default async function DisenosPage() {
                   <p className="text-xs text-gray-400 font-mono mt-1">{design.dimensions}</p>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="inline-block px-2 py-1 bg-gray-100 text-xs font-mono uppercase tracking-wide text-gray-600">
+                  <span className={`inline-block px-2 py-1 text-xs font-mono uppercase tracking-wide ${
+                    isMoodCategoryCompatible(design.category)
+                      ? 'bg-gray-100 text-gray-600'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
                     {design.category}
                   </span>
                 </td>
@@ -70,11 +77,25 @@ export default async function DisenosPage() {
                 <td className="px-6 py-4 text-center">
                   <span className={`inline-block w-3 h-3 rounded-full ${design.is_active ? 'bg-industrial-warning' : 'bg-gray-300'}`} />
                 </td>
+                <td className="px-6 py-4 text-right">
+                  <div className="flex flex-col items-end gap-2">
+                    <Link href={`/admin/disenos/${design.id}`} className="font-bold uppercase tracking-widest text-xs text-industrial-black hover:underline">
+                      Editar
+                    </Link>
+                    <form action={updateDesignStatus}>
+                      <input type="hidden" name="design_id" value={design.id} />
+                      <input type="hidden" name="is_active" value={design.is_active ? 'false' : 'true'} />
+                      <button type="submit" className="font-bold uppercase tracking-widest text-[10px] text-industrial-gray hover:text-industrial-black">
+                        {design.is_active ? 'Desactivar' : 'Activar'}
+                      </button>
+                    </form>
+                  </div>
+                </td>
               </tr>
             ))}
             {(!designs || designs.length === 0) && (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-gray-500 font-mono text-xs uppercase">
+                <td colSpan={6} className="px-6 py-12 text-center text-gray-500 font-mono text-xs uppercase">
                   No hay diseños registrados.
                 </td>
               </tr>

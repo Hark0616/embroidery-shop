@@ -5,14 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { uploadImage } from './storage'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-
-function hasCalibratedSurface(surfaces: unknown) {
-  if (!surfaces || typeof surfaces !== 'object' || Array.isArray(surfaces)) {
-    return false
-  }
-
-  return Object.keys(surfaces).length > 0
-}
+import { canActivateGarment } from '@/lib/admin/readiness'
 
 function slugify(value: string) {
   return value
@@ -132,7 +125,21 @@ export async function updateProductPublication(formData: FormData) {
     throw new Error('Invalid publication request')
   }
 
-  // Activation does not strictly require a mockup now, permitting fallbacks.
+  if (intent === 'activate') {
+    const { data: mockups, error: mockupError } = await supabase
+      .from('garment_mockups')
+      .select('status, is_public, surfaces')
+      .eq('product_id', productId)
+
+    if (mockupError) {
+      console.error('Error checking garment mockups:', mockupError)
+      throw new Error('Failed to validate garment mockups')
+    }
+
+    if (!canActivateGarment(mockups || [])) {
+      throw new Error('Publica al menos un mockup calibrado antes de activar la prenda.')
+    }
+  }
 
   const { error } = await supabase
     .from('base_products')

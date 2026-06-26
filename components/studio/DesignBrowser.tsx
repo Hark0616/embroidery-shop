@@ -6,23 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EmbroideryDesign } from '@/lib/types/database';
 import { applyMoodTheme } from '@/lib/theme';
-
-// Mood → Categories mapping (must match homepage)
-const MOOD_MAP: Record<string, string[]> = {
-    rebelde: ['rebelde', 'punk', 'rock', 'calaveras'],
-    delicado: ['delicado', 'flores', 'naturaleza', 'botanico'],
-    geek: ['geek', 'anime', 'gaming', 'pixel'],
-    tierno: ['tierno', 'kawaii', 'animales', 'cute'],
-    minimal: ['minimal', 'geometrico', 'abstracto', 'lineas'],
-};
-
-const MOOD_LABELS: Record<string, { label: string; icon: string }> = {
-    rebelde: { label: 'Rebelde', icon: '🔥' },
-    delicado: { label: 'Delicado', icon: '🌸' },
-    geek: { label: 'Geek', icon: '🎮' },
-    tierno: { label: 'Tierno', icon: '🐾' },
-    minimal: { label: 'Minimal', icon: '◯' },
-};
+import { MOOD_CATEGORY_MAP, MOOD_LABELS } from '@/lib/moods/catalog';
 
 interface DesignBrowserProps {
     designs: EmbroideryDesign[];
@@ -44,7 +28,7 @@ export default function DesignBrowser({ designs, categories }: DesignBrowserProp
 
     // Sync mood from URL and apply theme
     useEffect(() => {
-        if (moodParam && MOOD_MAP[moodParam]) {
+        if (moodParam && MOOD_CATEGORY_MAP[moodParam]) {
             setActiveMood(moodParam);
             applyMoodTheme(moodParam);
         } else {
@@ -57,8 +41,8 @@ export default function DesignBrowser({ designs, categories }: DesignBrowserProp
             const matchesSearch = d.name.toLowerCase().includes(search.toLowerCase());
 
             // Mood filter
-            if (activeMood && MOOD_MAP[activeMood]) {
-                const moodCategories = MOOD_MAP[activeMood];
+            if (activeMood && MOOD_CATEGORY_MAP[activeMood]) {
+                const moodCategories = MOOD_CATEGORY_MAP[activeMood];
                 const matchesMood = moodCategories.some(cat =>
                     d.category?.toLowerCase().includes(cat.toLowerCase())
                 );

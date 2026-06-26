@@ -1,9 +1,12 @@
-import { getDeliveryTime } from '@/lib/actions/config'
+import { getDeliveryTime, getWhatsAppConfig } from '@/lib/actions/config'
 import Link from 'next/link'
-import ConfigForm from '@/components/admin/ConfigForm'
+import ConfigForm, { WhatsAppConfigForm } from '@/components/admin/ConfigForm'
 
 export default async function ConfigPage() {
-    const currentMessage = await getDeliveryTime()
+    const [currentMessage, whatsapp] = await Promise.all([
+        getDeliveryTime(),
+        getWhatsAppConfig(),
+    ])
 
     return (
         <div className="p-8 bg-industrial-light min-h-screen">
@@ -42,21 +45,21 @@ export default async function ConfigPage() {
                     <ConfigForm initialMessage={currentMessage} />
                 </div>
 
-                {/* Placeholder sections for future expansion */}
-                <div className="bg-white border border-dashed border-industrial-gray/20 p-8 mb-6">
-                    <div className="flex items-center gap-3 mb-2">
-                        <span className="h-8 w-8 flex items-center justify-center border border-industrial-gray/20 text-industrial-gray text-[10px] font-bold">
+                <div className="bg-white border border-industrial-gray/20 p-8 shadow-sm mb-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <span className="h-8 w-8 flex items-center justify-center bg-industrial-black text-white text-[10px] font-bold">
                             02
                         </span>
                         <div>
-                            <h2 className="font-heading font-bold text-xl uppercase tracking-tight text-industrial-gray/60">
+                            <h2 className="font-heading font-bold text-xl uppercase tracking-tight">
                                 WhatsApp y Contacto
                             </h2>
-                            <p className="font-mono text-[10px] text-industrial-gray/40 uppercase tracking-widest">
-                                Próximamente
+                            <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest">
+                                Número usado por drops listos y pedidos personalizados
                             </p>
                         </div>
                     </div>
+                    <WhatsAppConfigForm initialPhone={whatsapp.phone} initialMessage={whatsapp.message} />
                 </div>
 
                 <div className="bg-white border border-dashed border-industrial-gray/20 p-8">

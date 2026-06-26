@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { useMemo, useState } from 'react'
+import { buildReadyProductCheckoutUrl, formatCopPrice } from '@/lib/checkout/ready-product'
 import type { ProductDrop, ReadyProduct } from '@/lib/types/database'
 
 type ReadyProductWithDrop = ReadyProduct & {
@@ -11,13 +12,10 @@ type ReadyProductWithDrop = ReadyProduct & {
 interface ReadyProductPurchaseProps {
   product: ReadyProductWithDrop
   leadTime: string
+  whatsappPhone: string
 }
 
-function formatPrice(value: number) {
-  return `$${Number(value || 0).toLocaleString('es-CO')}`
-}
-
-export default function ReadyProductPurchase({ product, leadTime }: ReadyProductPurchaseProps) {
+export default function ReadyProductPurchase({ product, leadTime, whatsappPhone }: ReadyProductPurchaseProps) {
   const images = useMemo(() => {
     const unique = [product.hero_image_url, ...(product.gallery_image_urls || [])].filter(Boolean)
     return Array.from(new Set(unique))
@@ -30,21 +28,33 @@ export default function ReadyProductPurchase({ product, leadTime }: ReadyProduct
   const canBuy = !isSoldOut && !!selectedSize && (!!selectedColor || product.available_colors.length === 0)
 
   const whatsappUrl = useMemo(() => {
-    const phone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '573013732290'
-    const message = `Hola, quiero pedir:
-- Producto: ${product.name}
-- Precio: ${formatPrice(product.price)} COP
-- Color: ${selectedColor || 'Unico'}
-- Talla: ${selectedSize || 'Por confirmar'}
-- Link: ${typeof window !== 'undefined' ? window.location.href : `/shop/${product.slug}`}
+    return buildReadyProductCheckoutUrl(
+      product,
+      {
+        color: selectedColor,
+        size: selectedSize,
+        sourceUrl: typeof window !== 'undefined' ? window.location.href : `/shop/${product.slug}`,
+      },
+      leadTime,
+      { phone: whatsappPhone },
+    )
+  }, [leadTime, product, selectedColor, selectedSize, whatsappPhone])
 
-Tiempo estimado: ${leadTime}`
+  const buyButtonLabel = isSoldOut
+    ? 'Agotado'
+    : canBuy
+      ? 'Comprar por WhatsApp'
+      : 'Elige talla y color'
 
-    return `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`
-  }, [leadTime, product.name, product.price, product.slug, selectedColor, selectedSize])
+  const buyButtonClass = `block w-full text-center font-black uppercase tracking-widest transition-colors ${
+    canBuy
+      ? 'bg-industrial-black text-industrial-warning hover:bg-industrial-warning hover:text-industrial-black'
+      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+  }`
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12">
+    <>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 max-w-7xl mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 lg:pb-12">
       <section className="lg:col-span-7">
         <div className="relative aspect-[4/5] bg-gray-100 border border-industrial-gray/10 overflow-hidden">
           <Image
@@ -96,11 +106,11 @@ Tiempo estimado: ${leadTime}`
 
           <div className="flex items-end gap-3 mb-8">
             <p className="font-heading font-black text-3xl">
-              {formatPrice(product.price)}
+              {formatCopPrice(product.price)}
             </p>
             {product.compare_at_price && product.compare_at_price > product.price && (
               <p className="font-mono text-sm text-industrial-gray line-through mb-1">
-                {formatPrice(product.compare_at_price)}
+                {formatCopPrice(product.compare_at_price)}
               </p>
             )}
           </div>
@@ -159,13 +169,9 @@ Tiempo estimado: ${leadTime}`
               if (!canBuy) event.preventDefault()
             }}
             aria-disabled={!canBuy}
-            className={`block w-full text-center py-5 font-black uppercase tracking-widest transition-colors ${
-              canBuy
-                ? 'bg-industrial-black text-industrial-warning hover:bg-industrial-warning hover:text-industrial-black'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
+            className={`${buyButtonClass} py-5`}
           >
-            {isSoldOut ? 'Agotado' : 'Comprar por WhatsApp'}
+            {buyButtonLabel}
           </a>
 
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
@@ -194,5 +200,29 @@ Tiempo estimado: ${leadTime}`
         </div>
       </section>
     </div>
+    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-industrial-gray/10 bg-white/95 p-4 shadow-2xl backdrop-blur lg:hidden">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <p className="font-heading font-black text-xl text-industrial-black">
+          {formatCopPrice(product.price)}
+        </p>
+        <p className="truncate font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+          {selectedSize ? `Talla ${selectedSize}` : 'Elige talla'}
+          {selectedColor ? ` · ${selectedColor}` : ''}
+        </p>
+      </div>
+      <a
+        href={canBuy ? whatsappUrl : '#'}
+        target={canBuy ? '_blank' : undefined}
+        rel="noopener noreferrer"
+        onClick={event => {
+          if (!canBuy) event.preventDefault()
+        }}
+        aria-disabled={!canBuy}
+        className={`${buyButtonClass} py-4 text-sm`}
+      >
+        {buyButtonLabel}
+      </a>
+    </div>
+    </>
   )
 }

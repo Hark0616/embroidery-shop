@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import type { BaseProduct } from '@/lib/types/database'
 import { getMockupImageForColor } from '@/lib/mockup-variants'
+import { getGarmentReadiness, hasCalibratedSurface } from '@/lib/admin/readiness'
 
 type MockupSummary = {
   id: string
@@ -21,69 +22,30 @@ type ProductWithMockups = BaseProduct & {
 
 
 function getSurfaceCount(mockup: MockupSummary) {
-  if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
-    return 0
-  }
-
-  return Object.keys(mockup.surfaces).length
+  return hasCalibratedSurface(mockup.surfaces) && mockup.surfaces && typeof mockup.surfaces === 'object' && !Array.isArray(mockup.surfaces)
+    ? Object.keys(mockup.surfaces).length
+    : 0
 }
 
 function getWorkflowState(product: ProductWithMockups) {
   const mockups = product.garment_mockups || []
+  const readiness = getGarmentReadiness(product, mockups)
   const calibratedCount = mockups.filter(mockup => getSurfaceCount(mockup) > 0).length
-  const publishedCount = mockups.filter(mockup => mockup.is_public && mockup.status === 'published').length
 
   if (mockups.length === 0) {
     return {
-      label: 'Sin mockups',
-      detail: 'Agrega fotos de la prenda',
-      className: 'border-gray-300 text-gray-500 bg-gray-50',
+      label: readiness.label,
+      detail: readiness.detail,
+      className: readiness.className,
       mockupText: '0 mockups',
     }
   }
 
-  if (product.is_active && publishedCount > 0) {
-    return {
-      label: 'Publicado',
-      detail: `${publishedCount} visible${publishedCount === 1 ? '' : 's'} en tienda`,
-      className: 'border-green-500 text-green-700 bg-green-50',
-      mockupText: `${calibratedCount}/${mockups.length} calibrados`,
-    }
-  }
-
-  // Permisivo: permitir publicar aunque no estén todos o si es activado sin mockups
-  if (product.is_active) {
-    return {
-      label: 'Publicado',
-      detail: `${publishedCount} visible${publishedCount === 1 ? '' : 's'} en tienda`,
-      className: 'border-green-500 text-green-700 bg-green-50',
-      mockupText: `${calibratedCount}/${mockups.length} calibrados`,
-    }
-  }
-
-  if (publishedCount > 0) {
-    return {
-      label: 'Listo',
-      detail: 'Puede publicarse',
-      className: 'border-industrial-warning text-industrial-black bg-industrial-warning/10',
-      mockupText: `${calibratedCount}/${mockups.length} calibrados`,
-    }
-  }
-
-  if (calibratedCount > 0) {
-    return {
-      label: 'En revisión',
-      detail: 'Falta publicar mockup',
-      className: 'border-blue-400 text-blue-700 bg-blue-50',
-      mockupText: `${calibratedCount}/${mockups.length} calibrados`,
-    }
-  }
-
   return {
-    label: 'Pendiente',
-    detail: 'Falta calibrar',
-    className: 'border-red-300 text-red-700 bg-red-50',
-    mockupText: `0/${mockups.length} calibrados`,
+    label: readiness.label,
+    detail: readiness.detail,
+    className: readiness.className,
+    mockupText: `${calibratedCount}/${mockups.length} calibrados`,
   }
 }
 

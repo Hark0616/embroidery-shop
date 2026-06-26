@@ -31,17 +31,24 @@ async function getUniqueSlug(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   table: 'product_drops' | 'ready_products',
   value: string,
+  excludeId?: string,
 ) {
   const baseSlug = slugify(value) || `${table}-${Date.now()}`
   let candidate = baseSlug
   let suffix = 2
 
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
       .select('id')
       .eq('slug', candidate)
       .limit(1)
+
+    if (excludeId) {
+      query = query.neq('id', excludeId)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error(`Error checking ${table} slug:`, error)
@@ -190,4 +197,208 @@ export async function createReadyProduct(formData: FormData) {
   revalidatePath('/shop')
   revalidatePath('/admin/recomendados')
   redirect('/admin/recomendados')
+}
+
+export async function updateDrop(formData: FormData) {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
+  const dropId = String(formData.get('drop_id') || '').trim()
+  const name = String(formData.get('name') || '').trim()
+  const rawSlug = String(formData.get('slug') || '').trim()
+  const description = String(formData.get('description') || '').trim() || null
+  const status = (String(formData.get('status') || 'draft') || 'draft') as 'draft' | 'published' | 'hidden'
+  const sortOrder = parseNumber(formData.get('sort_order'))
+  const imageFile = formData.get('image') as File | null
+
+  if (!dropId) throw new Error('El drop es obligatorio.')
+  if (!name) throw new Error('El nombre del drop es obligatorio.')
+
+  const slug = await getUniqueSlug(supabase, 'product_drops', rawSlug || name, dropId)
+  const payload: Record<string, unknown> = {
+    name,
+    slug,
+    description,
+    status,
+    sort_order: sortOrder,
+  }
+
+  if (imageFile && imageFile.size > 0) {
+    const imageUrl = await uploadImage(imageFile, 'products', 'drops')
+    if (!imageUrl) throw new Error('No se pudo subir la imagen del drop.')
+    payload.image_url = imageUrl
+  }
+
+  const { error } = await supabase
+    .from('product_drops')
+    .update(payload)
+    .eq('id', dropId)
+
+  if (error) {
+    console.error('Error updating drop:', error)
+    throw new Error('No se pudo actualizar el drop.')
+  }
+
+  revalidatePath('/')
+  revalidatePath('/shop')
+  revalidatePath('/admin/recomendados')
+  redirect('/admin/recomendados')
+}
+
+export async function updateReadyProduct(formData: FormData) {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
+  const productId = String(formData.get('product_id') || '').trim()
+  const name = String(formData.get('name') || '').trim()
+  const rawSlug = String(formData.get('slug') || '').trim()
+  const dropId = String(formData.get('drop_id') || '').trim() || null
+  const baseProductId = String(formData.get('base_product_id') || '').trim() || null
+  const designId = String(formData.get('design_id') || '').trim() || null
+  const sku = String(formData.get('sku') || '').trim() || null
+  const shortDescription = String(formData.get('short_description') || '').trim() || null
+  const description = String(formData.get('description') || '').trim() || null
+  const status = (String(formData.get('status') || 'draft') || 'draft') as 'draft' | 'published' | 'hidden' | 'sold_out'
+  const primaryColor = String(formData.get('primary_color') || '').trim() || null
+  const availableColors = parseList(formData.get('available_colors'))
+  const availableSizes = parseList(formData.get('available_sizes'))
+  const tags = parseList(formData.get('tags')).map(tag => tag.toLowerCase())
+  const price = parseNumber(formData.get('price'), NaN)
+  const compareAtRaw = String(formData.get('compare_at_price') || '').trim()
+  const compareAtPrice = compareAtRaw ? parseNumber(compareAtRaw) : null
+  const isFeatured = formData.get('is_featured') === 'on'
+  const sortOrder = parseNumber(formData.get('sort_order'))
+  const heroFile = formData.get('hero_image') as File | null
+  const galleryFiles = formData.getAll('gallery_images') as File[]
+
+  if (!productId) throw new Error('El producto listo es obligatorio.')
+  if (!name) throw new Error('El nombre del producto listo es obligatorio.')
+  if (!Number.isFinite(price) || price <= 0) throw new Error('El precio final debe ser mayor a cero.')
+  if (availableSizes.length === 0) throw new Error('Agrega al menos una talla disponible.')
+  if (!primaryColor && availableColors.length === 0) throw new Error('Agrega al menos un color o color principal.')
+
+  const slug = await getUniqueSlug(supabase, 'ready_products', rawSlug || name, productId)
+  const normalizedColors = availableColors.length > 0
+    ? availableColors
+    : primaryColor
+      ? [primaryColor]
+      : []
+
+  const payload: Record<string, unknown> = {
+    drop_id: dropId,
+    base_product_id: baseProductId,
+    design_id: designId,
+    name,
+    slug,
+    sku,
+    short_description: shortDescription,
+    description,
+    status,
+    primary_color: primaryColor,
+    available_colors: normalizedColors,
+    available_sizes: availableSizes,
+    price,
+    compare_at_price: compareAtPrice,
+    tags,
+    is_featured: isFeatured,
+    sort_order: sortOrder,
+  }
+
+  if (heroFile && heroFile.size > 0) {
+    const heroImageUrl = await uploadImage(heroFile, 'products', 'ready-products')
+    if (!heroImageUrl) throw new Error('No se pudo subir la foto principal.')
+    payload.hero_image_url = heroImageUrl
+  }
+
+  const galleryImageUrls: string[] = []
+  for (const file of galleryFiles) {
+    if (!file || file.size === 0) continue
+    const uploaded = await uploadImage(file, 'products', 'ready-products/gallery')
+    if (uploaded) galleryImageUrls.push(uploaded)
+  }
+  if (galleryImageUrls.length > 0) {
+    payload.gallery_image_urls = galleryImageUrls
+  }
+
+  const { error } = await supabase
+    .from('ready_products')
+    .update(payload)
+    .eq('id', productId)
+
+  if (error) {
+    console.error('Error updating ready product:', error)
+    throw new Error('No se pudo actualizar el producto listo.')
+  }
+
+  revalidatePath('/')
+  revalidatePath('/shop')
+  revalidatePath('/admin/recomendados')
+  redirect('/admin/recomendados')
+}
+
+export async function updateReadyProductStatus(formData: FormData) {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
+  const productId = String(formData.get('product_id') || '').trim()
+  const status = String(formData.get('status') || '').trim()
+
+  if (!productId || !['draft', 'published', 'hidden', 'sold_out'].includes(status)) {
+    throw new Error('Estado de producto inválido.')
+  }
+
+  const { error } = await supabase
+    .from('ready_products')
+    .update({ status })
+    .eq('id', productId)
+
+  if (error) {
+    console.error('Error updating ready product status:', error)
+    throw new Error('No se pudo cambiar el estado.')
+  }
+
+  revalidatePath('/')
+  revalidatePath('/shop')
+  revalidatePath('/admin/recomendados')
+}
+
+export async function toggleReadyProductFeatured(formData: FormData) {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
+  const productId = String(formData.get('product_id') || '').trim()
+  const isFeatured = formData.get('is_featured') === 'true'
+
+  if (!productId) {
+    throw new Error('El producto listo es obligatorio.')
+  }
+
+  const { error } = await supabase
+    .from('ready_products')
+    .update({ is_featured: isFeatured })
+    .eq('id', productId)
+
+  if (error) {
+    console.error('Error toggling ready product featured:', error)
+    throw new Error('No se pudo destacar el producto.')
+  }
+
+  revalidatePath('/')
+  revalidatePath('/admin/recomendados')
 }

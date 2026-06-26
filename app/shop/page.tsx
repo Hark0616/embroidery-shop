@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { createPublicClient } from '@/lib/supabase/server'
 import { buildShopHref, normalizeShopFilter } from '@/lib/shop/filters'
 import type { ProductDrop, ReadyProduct } from '@/lib/types/database'
+import { getWhatsAppConfig } from '@/lib/actions/config'
+import { buildWhatsAppContactUrl } from '@/lib/config/whatsapp'
 
 export const revalidate = 0
 
@@ -10,25 +12,18 @@ type ReadyProductWithDrop = ReadyProduct & {
   product_drops?: Pick<ProductDrop, 'name' | 'slug'> | null
 }
 
-const TAG_LABELS: Record<string, string> = {
-  rebelde: 'Rebelde',
-  delicado: 'Delicado',
-  geek: 'Geek',
-  tierno: 'Tierno',
-  minimal: 'Minimal',
-}
-
 function formatPrice(value: number) {
   return `$${Number(value || 0).toLocaleString('es-CO')}`
 }
 
-export default async function ShopPage({ searchParams }: { searchParams?: { tag?: string; drop?: string } }) {
+export default async function ShopPage({ searchParams }: { searchParams?: { drop?: string } }) {
   const supabase = createPublicClient()
-  const activeTag = normalizeShopFilter(searchParams?.tag)
   const activeDrop = normalizeShopFilter(searchParams?.drop)
   let products: ReadyProductWithDrop[] = []
   let drops: ProductDrop[] = []
   let activeDropRow: ProductDrop | null = null
+  const whatsapp = await getWhatsAppConfig()
+  const contactHref = buildWhatsAppContactUrl(whatsapp.phone, whatsapp.message)
 
   if (supabase) {
     const { data: dropData } = await supabase
@@ -54,10 +49,6 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
       }
     }
 
-    if (activeTag) {
-      query = query.contains('tags', [activeTag])
-    }
-
     const { data, error } = await query
       .order('sort_order')
       .order('created_at', { ascending: false })
@@ -69,15 +60,13 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
 
   const pageTitle = activeDropRow
     ? activeDropRow.name
-    : activeTag
-      ? TAG_LABELS[activeTag] || activeTag
-      : 'Recomendados'
+    : 'Drops listos'
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
       <header className="mb-10 md:mb-14">
         <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-3">
-          Prendas listas para pedir
+          Drops listos para pedir
         </p>
         <h1 className="font-heading font-black text-4xl md:text-6xl uppercase tracking-tighter leading-none mb-4">
           {pageTitle}
@@ -85,12 +74,12 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
         <p className="text-sm text-industrial-gray max-w-2xl leading-relaxed">
           Combinaciones ya resueltas con fotos finales. Elige talla, color y confirma tu pedido por WhatsApp.
         </p>
-        {(activeTag || activeDropRow) && (
+        {activeDrop && (
           <Link
             href="/shop"
             className="inline-block mt-5 font-mono text-[10px] uppercase tracking-widest text-industrial-black hover:text-industrial-warning"
           >
-            Ver todos los recomendados
+            Ver todos los drops
           </Link>
         )}
       </header>
@@ -98,7 +87,7 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
       {drops.length > 0 && (
         <nav className="flex gap-2 overflow-x-auto pb-4 mb-8 border-b border-industrial-gray/10">
           <Link
-            href={buildShopHref({ tag: activeTag })}
+            href={buildShopHref({})}
             className={`px-4 py-2 border text-[10px] font-bold uppercase tracking-widest whitespace-nowrap ${
               !activeDrop
                 ? 'bg-industrial-black border-industrial-black text-white'
@@ -110,7 +99,7 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
           {drops.map(drop => (
             <Link
               key={drop.id}
-              href={buildShopHref({ drop: drop.slug, tag: activeTag })}
+              href={buildShopHref({ drop: drop.slug })}
               className={`px-4 py-2 border text-[10px] font-bold uppercase tracking-widest whitespace-nowrap ${
                 activeDrop === drop.slug
                   ? 'bg-industrial-black border-industrial-black text-white'
@@ -124,19 +113,27 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
       )}
 
       {products.length === 0 ? (
-        <div className="border border-dashed border-industrial-gray/30 py-20 text-center">
-          <p className="font-mono text-xs uppercase tracking-widest text-industrial-gray">
-            {activeTag
-              ? 'Pronto publicaremos productos para este estilo.'
-              : 'Pronto publicaremos nuevos recomendados.'}
+        <div className="border border-dashed border-industrial-gray/30 px-6 py-16 md:py-20 text-center">
+          <p className="font-mono text-xs uppercase tracking-widest text-industrial-gray max-w-xl mx-auto leading-relaxed">
+            {activeDropRow
+              ? 'Pronto publicaremos productos para este drop.'
+              : 'Pronto publicaremos nuevos drops listos. Puedes escribirnos o crear uno personalizado desde el catálogo de diseños.'}
           </p>
-          <Link
-            href={activeTag ? '/shop' : 'https://wa.me/573013732290'}
-            target={activeTag ? undefined : '_blank'}
-            className="inline-block mt-6 px-6 py-3 bg-industrial-black text-white text-xs font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
-          >
-            {activeTag ? 'Ver todos' : 'Pedir por WhatsApp'}
-          </Link>
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href={contactHref}
+              target="_blank"
+              className="inline-flex w-full sm:w-auto items-center justify-center px-6 py-3 bg-industrial-black text-white text-xs font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+            >
+              Pedir por WhatsApp
+            </Link>
+            <Link
+              href="/designs"
+              className="inline-flex w-full sm:w-auto items-center justify-center px-6 py-3 border border-industrial-black text-industrial-black text-xs font-bold uppercase tracking-widest hover:bg-industrial-black hover:text-white transition-colors"
+            >
+              Crear uno personalizado
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">

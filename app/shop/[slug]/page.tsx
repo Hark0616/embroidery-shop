@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createPublicClient } from '@/lib/supabase/server'
-import { getDeliveryTime } from '@/lib/actions/config'
+import { getDeliveryTime, getWhatsAppConfig } from '@/lib/actions/config'
 import ReadyProductPurchase from '@/components/shop/ReadyProductPurchase'
 import type { ProductDrop, ReadyProduct } from '@/lib/types/database'
 
@@ -43,11 +43,14 @@ export default async function ReadyProductPage({ params }: { params: { slug: str
     notFound()
   }
 
-  const leadTime = await getDeliveryTime()
+  const [leadTime, whatsapp] = await Promise.all([
+    getDeliveryTime(),
+    getWhatsAppConfig(),
+  ])
 
   return (
     <div className="min-h-screen bg-white">
-      <ReadyProductPurchase product={product as ReadyProductWithDrop} leadTime={leadTime} />
+      <ReadyProductPurchase product={product as ReadyProductWithDrop} leadTime={leadTime} whatsappPhone={whatsapp.phone} />
     </div>
   )
 }

@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import type { BaseProduct, CalibrationSurface, EmbroideryDesign, GarmentMockup } from '@/lib/types/database';
 import Visualizer from './Visualizer';
 import OptionSelector from './OptionSelector';
-import { buildWhatsAppMessage } from '@/lib/whatsapp';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
@@ -12,14 +11,20 @@ import { applyMoodTheme } from '@/lib/theme';
 import { uploadCustomDesign } from '@/lib/supabase/storage';
 import { COLOR_MAP } from '@/lib/colors';
 import { getMockupImageForColor, getMockupShadowForColor } from '@/lib/mockup-variants';
+import {
+    getInitialStudioStep,
+    getStepAfterProductSelect,
+    shouldPreserveCustomMode,
+    type StudioStep,
+} from '@/lib/studio/flow';
 
 interface VirtualStudioProps {
     products: BaseProduct[];
     designs: EmbroideryDesign[];
     mockups?: GarmentMockup[];
+    whatsappPhone: string;
+    whatsappMessage?: string;
 }
-
-type StudioStep = 'product' | 'design' | 'details' | 'checkout';
 
 function hasCalibratedSurfaces(mockup: GarmentMockup) {
     return !!(
@@ -30,7 +35,7 @@ function hasCalibratedSurfaces(mockup: GarmentMockup) {
     );
 }
 
-export default function VirtualStudio({ products, designs, mockups = [] }: VirtualStudioProps) {
+export default function VirtualStudio({ products, designs, mockups = [], whatsappPhone, whatsappMessage = '' }: VirtualStudioProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -49,12 +54,11 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
         initialDesign
     );
 
-    const [activeStep, setActiveStep] = useState<StudioStep>(() => {
-        if (initialProduct && (initialDesign || isCustomMode)) return 'details';
-        if (initialProduct) return 'design';
-        if (initialDesign || isCustomMode) return 'product';
-        return 'product';
-    });
+    const [activeStep, setActiveStep] = useState<StudioStep>(() => getInitialStudioStep({
+        hasProduct: !!initialProduct,
+        hasDesign: !!initialDesign,
+        isCustomMode,
+    }));
 
     const [selectedColor, setSelectedColor] = useState<string>('');
     const [selectedSize, setSelectedSize] = useState<string>('');
@@ -190,10 +194,26 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
         }
     }, [selectedDesign, isCustomUpload, searchParams]);
 
-    const updateUrl = (key: 'product' | 'design', value: string) => {
+    const updateUrl = (
+        key: 'product' | 'design',
+        value: string,
+        options: { preserveCustom?: boolean } = {},
+    ) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set(key, value);
-        params.delete('custom');
+        if (options.preserveCustom) {
+            params.set('custom', 'true');
+        } else {
+            params.delete('custom');
+        }
+        router.replace(`/studio?${params.toString()}`, { scroll: false });
+    };
+
+    const markCustomModeInUrl = () => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (selectedProduct) params.set('product', selectedProduct.slug);
+        params.delete('design');
+        params.set('custom', 'true');
         router.replace(`/studio?${params.toString()}`, { scroll: false });
     };
 
@@ -201,8 +221,17 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
         const product = products.find(p => p.slug === slug);
         if (product) {
             setSelectedProduct(product);
-            updateUrl('product', slug);
-            setActiveStep(selectedDesign || isCustomUpload ? 'details' : 'design');
+            updateUrl('product', slug, {
+                preserveCustom: shouldPreserveCustomMode({
+                    isCustomUpload,
+                    hasDesign: !!selectedDesign,
+                }),
+            });
+            setActiveStep(getStepAfterProductSelect({
+                hasDesign: !!selectedDesign,
+                isCustomUpload,
+                hasCustomFile: !!customPreviewUrl,
+            }));
         }
     };
 
@@ -229,6 +258,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             setActiveStep(selectedProduct ? 'details' : 'product');
             setUploadError(null);
             setUploadedLogoUrl(null);
+            markCustomModeInUrl();
             
             setIsUploadingLogo(true);
             try {
@@ -270,7 +300,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             : selectedDesign?.name || '';
             
         const placementLabel = placements[activePlacement]?.label || activePlacement;
-        const customMessage = `👕 PRENDA: ${selectedProduct.name}
+        const customMessage = `${whatsappMessage ? `${whatsappMessage}\n\n` : ''}👕 PRENDA: ${selectedProduct.name}
 🎨 DISEÑO: ${designName}
 📍 ZONA: ${placementLabel}
 📏 TALLA: ${selectedSize}
@@ -280,8 +310,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
 Hola, quiero ordenar este bordado personalizado.`;
 
         const encodedMessage = encodeURIComponent(customMessage);
-        const phone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '573013732290';
-        const whatsappUrl = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodedMessage}`;
+        const whatsappUrl = `https://wa.me/${whatsappPhone.replace(/[^0-9]/g, '')}?text=${encodedMessage}`;
 
         window.location.href = whatsappUrl;
     };
@@ -648,7 +677,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                             renderStepHeader(
                                 'design',
                                 `Diseño: ${isCustomUpload ? (customDesignName || 'Tu diseño') : selectedDesign?.name || 'Seleccionar'}`,
-                                !!(selectedDesign || isCustomUpload),
+                                !!(selectedDesign || customPreviewUrl),
                                 '2'
                             )
                         )}
