@@ -106,6 +106,115 @@ export interface Database {
           updated_at?: string
         }
       }
+      product_drops: {
+        Row: {
+          id: string
+          name: string
+          slug: string
+          description: string | null
+          image_url: string | null
+          status: 'draft' | 'published' | 'hidden'
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          slug: string
+          description?: string | null
+          image_url?: string | null
+          status?: 'draft' | 'published' | 'hidden'
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          slug?: string
+          description?: string | null
+          image_url?: string | null
+          status?: 'draft' | 'published' | 'hidden'
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      ready_products: {
+        Row: {
+          id: string
+          drop_id: string | null
+          base_product_id: string | null
+          design_id: string | null
+          name: string
+          slug: string
+          sku: string | null
+          short_description: string | null
+          description: string | null
+          status: 'draft' | 'published' | 'hidden' | 'sold_out'
+          primary_color: string | null
+          available_colors: string[]
+          available_sizes: string[]
+          price: number
+          compare_at_price: number | null
+          hero_image_url: string
+          gallery_image_urls: string[]
+          tags: string[]
+          is_featured: boolean
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          drop_id?: string | null
+          base_product_id?: string | null
+          design_id?: string | null
+          name: string
+          slug: string
+          sku?: string | null
+          short_description?: string | null
+          description?: string | null
+          status?: 'draft' | 'published' | 'hidden' | 'sold_out'
+          primary_color?: string | null
+          available_colors?: string[]
+          available_sizes?: string[]
+          price: number
+          compare_at_price?: number | null
+          hero_image_url: string
+          gallery_image_urls?: string[]
+          tags?: string[]
+          is_featured?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          drop_id?: string | null
+          base_product_id?: string | null
+          design_id?: string | null
+          name?: string
+          slug?: string
+          sku?: string | null
+          short_description?: string | null
+          description?: string | null
+          status?: 'draft' | 'published' | 'hidden' | 'sold_out'
+          primary_color?: string | null
+          available_colors?: string[]
+          available_sizes?: string[]
+          price?: number
+          compare_at_price?: number | null
+          hero_image_url?: string
+          gallery_image_urls?: string[]
+          tags?: string[]
+          is_featured?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
       base_products: {
         Row: {
           id: string
@@ -283,6 +392,8 @@ export type Product = Database['public']['Tables']['products']['Row']
 export type ProductInsert = Database['public']['Tables']['products']['Insert']
 export type ProductUpdate = Database['public']['Tables']['products']['Update']
 
+export type ProductDrop = Database['public']['Tables']['product_drops']['Row']
+export type ReadyProduct = Database['public']['Tables']['ready_products']['Row']
 export type BaseProduct = Database['public']['Tables']['base_products']['Row']
 export type EmbroideryDesign = Database['public']['Tables']['embroidery_designs']['Row']
 export type GarmentMockup = Database['public']['Tables']['garment_mockups']['Row']

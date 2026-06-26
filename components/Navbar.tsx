@@ -36,9 +36,7 @@ export default function Navbar() {
     }, [isMobileMenuOpen]);
 
     const navLinks = [
-        { href: '/studio', label: 'Studio' },
-        { href: '/catalog', label: 'Catálogo' },
-        { href: '/designs', label: 'Diseños' },
+        { href: '/shop', label: 'Tienda' },
     ];
 
     return (

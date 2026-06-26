@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { createPublicClient } from '@/lib/supabase/server';
 import MoodSelector from '@/components/MoodSelector';
+import type { ReadyProduct } from '@/lib/types/database';
 
 export const revalidate = 60;
 
@@ -59,16 +61,28 @@ const MOODS = [
 export default async function Home() {
     const supabase = createPublicClient();
     let recentDesigns: any[] = [];
+    let recommendedProducts: ReadyProduct[] = [];
 
     if (supabase) {
-        const { data } = await supabase
-            .from('embroidery_designs')
-            .select('*')
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(6);
+        const [{ data }, { data: readyProducts }] = await Promise.all([
+            supabase
+                .from('embroidery_designs')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(6),
+            supabase
+                .from('ready_products')
+                .select('*')
+                .in('status', ['published', 'sold_out'])
+                .order('is_featured', { ascending: false })
+                .order('sort_order')
+                .order('created_at', { ascending: false })
+                .limit(6),
+        ]);
 
         if (data) recentDesigns = data;
+        if (readyProducts) recommendedProducts = readyProducts as ReadyProduct[];
     }
 
     return (
@@ -97,38 +111,38 @@ export default async function Home() {
                     {/* Craft badge */}
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-8 border border-industrial-warning/30 text-industrial-warning">
                         <span className="w-1.5 h-1.5 bg-industrial-warning rounded-full animate-pulse" />
-                        <span className="font-mono text-[10px] tracking-[0.3em] uppercase">Bordados Personalizados</span>
+                        <span className="font-mono text-[10px] tracking-[0.3em] uppercase">Prendas bordadas listas para pedir</span>
                     </div>
 
                     <h1 className="font-heading font-black text-5xl md:text-7xl lg:text-8xl tracking-tighter mb-6 uppercase leading-[0.9]">
-                        ¿Qué quieres
+                        Bordados
                         <br />
-                        <span className="text-industrial-warning">expresar</span>
+                        <span className="text-industrial-warning">ya armados</span>
                         <br />
-                        <span className="text-3xl md:text-4xl lg:text-5xl tracking-tight font-bold text-gray-500">hoy?</span>
+                        <span className="text-3xl md:text-4xl lg:text-5xl tracking-tight font-bold text-gray-500">para usar hoy</span>
                     </h1>
 
                     <p className="font-mono text-xs md:text-sm text-gray-500 mb-10 max-w-md mx-auto tracking-widest uppercase leading-relaxed">
-                        Elige un estilo. Personaliza tu prenda.
+                        Elige una prenda con diseño listo.
                         <br />
-                        Lo bordamos a mano para ti.
+                        Confirma talla y color por WhatsApp.
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <Link
-                            href="#moods"
+                            href="/shop"
                             className="inline-flex items-center justify-center gap-2 bg-industrial-warning text-industrial-black font-bold text-sm px-8 py-4 uppercase tracking-widest hover:bg-white transition-colors duration-300"
                         >
-                            <span>Explorar Estilos</span>
+                            <span>Ver tienda</span>
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                             </svg>
                         </Link>
                         <Link
-                            href="/studio"
+                            href="#moods"
                             className="inline-flex items-center justify-center gap-2 border border-white/30 text-white font-bold text-sm px-8 py-4 uppercase tracking-widest hover:bg-white/10 transition-colors duration-300"
                         >
-                            Ir al Studio
+                            Explorar estilos
                         </Link>
                     </div>
                 </div>
@@ -137,15 +151,76 @@ export default async function Home() {
                 <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-industrial-light to-transparent" />
             </section>
 
+            {recommendedProducts.length > 0 && (
+                <section className="py-16 md:py-24 px-4 bg-white border-b border-industrial-gray/10">
+                    <div className="max-w-7xl mx-auto">
+                        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
+                            <div>
+                                <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest mb-3">
+                                    Listo para pedir
+                                </p>
+                                <h2 className="font-heading font-black text-3xl md:text-5xl uppercase tracking-tighter text-industrial-black">
+                                    Recomendados
+                                </h2>
+                            </div>
+                            <Link
+                                href="/shop"
+                                className="inline-flex items-center justify-center border border-industrial-black px-5 py-3 text-xs font-bold uppercase tracking-widest hover:bg-industrial-black hover:text-white transition-colors"
+                            >
+                                Ver tienda
+                            </Link>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                            {recommendedProducts.map(product => (
+                                <Link
+                                    key={product.id}
+                                    href={`/shop/${product.slug}`}
+                                    className="group"
+                                >
+                                    <div className="relative aspect-[4/5] bg-gray-100 overflow-hidden border border-industrial-gray/10">
+                                        <Image
+                                            src={product.hero_image_url}
+                                            alt={product.name}
+                                            fill
+                                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                                        />
+                                        {product.status === 'sold_out' && (
+                                            <span className="absolute top-3 right-3 bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest px-2 py-1">
+                                                Agotado
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="py-4">
+                                        <h3 className="font-bold text-lg uppercase tracking-tight group-hover:text-industrial-warning transition-colors">
+                                            {product.name}
+                                        </h3>
+                                        <div className="flex items-center justify-between mt-2">
+                                            <p className="font-mono text-sm text-industrial-black">
+                                                ${Number(product.price || 0).toLocaleString('es-CO')}
+                                            </p>
+                                            <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                                                Comprar
+                                            </span>
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            )}
+
             {/* ─── Mood Selector ─── */}
             <section id="moods" className="py-20 md:py-28 px-4 bg-industrial-light scroll-mt-16">
                 <div className="max-w-7xl mx-auto">
                     <div className="mb-12 md:mb-16">
                         <h2 className="font-heading font-black text-3xl md:text-5xl uppercase tracking-tighter text-industrial-black mb-3">
-                            Elige tu <span className="text-industrial-warning">Vibe</span>
+                            Compra por <span className="text-industrial-warning">estilo</span>
                         </h2>
                         <p className="font-mono text-xs md:text-sm text-industrial-gray uppercase tracking-widest max-w-lg">
-                            Selecciona el estilo que más te representa. Cada uno tiene una colección de diseños curados para ti.
+                            Usa estas rutas para encontrar prendas armadas por mood, drop o campaña.
                         </p>
                     </div>
 
@@ -161,7 +236,7 @@ export default async function Home() {
                             Cómo <span className="text-industrial-warning">Funciona</span>
                         </h2>
                         <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest">
-                            3 pasos simples · Tu prenda única en días
+                            3 pasos simples · Menos dudas antes de comprar
                         </p>
                     </div>
 
@@ -170,19 +245,19 @@ export default async function Home() {
                             {
                                 step: '01',
                                 title: 'Elige',
-                                description: 'Selecciona un diseño de nuestra biblioteca o sube el tuyo propio.',
+                                description: 'Selecciona una prenda armada con fotos finales y precio claro.',
                                 icon: '🎨',
                             },
                             {
                                 step: '02',
-                                title: 'Personaliza',
-                                description: 'Elige prenda, color, talla y ubicación del bordado en nuestro Studio.',
+                                title: 'Confirma',
+                                description: 'Escoge talla y color disponibles, luego confirma el pedido por WhatsApp.',
                                 icon: '⚙️',
                             },
                             {
                                 step: '03',
                                 title: 'Recibe',
-                                description: 'Lo bordamos artesanalmente y te lo enviamos. Cada pieza es única.',
+                                description: 'Lo producimos bajo pedido y coordinamos la entrega contigo.',
                                 icon: '📦',
                             },
                         ].map((item, i) => (
@@ -209,10 +284,10 @@ export default async function Home() {
 
                     <div className="text-center mt-16">
                         <Link
-                            href="/studio"
+                            href="/shop"
                             className="inline-flex items-center gap-2 bg-industrial-black text-white font-bold text-sm px-10 py-4 uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors duration-300"
                         >
-                            Empezar a Crear
+                            Ver Recomendados
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                             </svg>

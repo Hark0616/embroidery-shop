@@ -32,8 +32,8 @@ export default function MoodSelector({ moods, designs }: MoodSelectorProps) {
                     .filter(Boolean);
 
                 const href = m.mood === 'custom'
-                    ? '/studio?custom=true'
-                    : `/designs?mood=${m.mood}`;
+                    ? '/shop'
+                    : `/shop?tag=${m.mood}`;
 
                 return (
                     <MoodCard
