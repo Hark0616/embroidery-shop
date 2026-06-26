@@ -258,10 +258,9 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
 
     const estimatedTotal = useMemo(() => {
         if (!selectedProduct) return 0;
-        // Mock embroidery cost calculation (could be based on placement scale or design category)
-        const embroideryCost = isCustomUpload ? 25000 : 15000;
+        const embroideryCost = isCustomUpload ? 25000 : selectedDesign?.price_modifier || 0;
         return selectedProduct.base_price + embroideryCost;
-    }, [selectedProduct, isCustomUpload]);
+    }, [selectedProduct, selectedDesign, isCustomUpload]);
 
     const handleWhatsAppCheckout = () => {
         if (!selectedProduct || !activeCalibratedSurface) return;

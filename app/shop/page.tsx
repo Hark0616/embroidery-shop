@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { createPublicClient } from '@/lib/supabase/server'
+import { buildShopHref, normalizeShopFilter } from '@/lib/shop/filters'
 import type { ProductDrop, ReadyProduct } from '@/lib/types/database'
 
 export const revalidate = 0
@@ -21,24 +22,37 @@ function formatPrice(value: number) {
   return `$${Number(value || 0).toLocaleString('es-CO')}`
 }
 
-function normalizeTag(value: string | undefined) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, '')
-}
-
-export default async function ShopPage({ searchParams }: { searchParams?: { tag?: string } }) {
+export default async function ShopPage({ searchParams }: { searchParams?: { tag?: string; drop?: string } }) {
   const supabase = createPublicClient()
-  const activeTag = normalizeTag(searchParams?.tag)
-  const pageTitle = activeTag ? TAG_LABELS[activeTag] || activeTag : 'Recomendados'
+  const activeTag = normalizeShopFilter(searchParams?.tag)
+  const activeDrop = normalizeShopFilter(searchParams?.drop)
   let products: ReadyProductWithDrop[] = []
+  let drops: ProductDrop[] = []
+  let activeDropRow: ProductDrop | null = null
 
   if (supabase) {
+    const { data: dropData } = await supabase
+      .from('product_drops')
+      .select('*')
+      .eq('status', 'published')
+      .order('sort_order')
+      .order('created_at', { ascending: false })
+
+    drops = (dropData || []) as ProductDrop[]
+    activeDropRow = activeDrop ? drops.find(drop => drop.slug === activeDrop) || null : null
+
     let query = supabase
       .from('ready_products')
       .select('*, product_drops(name, slug)')
       .in('status', ['published', 'sold_out'])
+
+    if (activeDrop) {
+      if (activeDropRow) {
+        query = query.eq('drop_id', activeDropRow.id)
+      } else {
+        query = query.eq('drop_id', '00000000-0000-0000-0000-000000000000')
+      }
+    }
 
     if (activeTag) {
       query = query.contains('tags', [activeTag])
@@ -53,6 +67,12 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
     }
   }
 
+  const pageTitle = activeDropRow
+    ? activeDropRow.name
+    : activeTag
+      ? TAG_LABELS[activeTag] || activeTag
+      : 'Recomendados'
+
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
       <header className="mb-10 md:mb-14">
@@ -65,7 +85,7 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
         <p className="text-sm text-industrial-gray max-w-2xl leading-relaxed">
           Combinaciones ya resueltas con fotos finales. Elige talla, color y confirma tu pedido por WhatsApp.
         </p>
-        {activeTag && (
+        {(activeTag || activeDropRow) && (
           <Link
             href="/shop"
             className="inline-block mt-5 font-mono text-[10px] uppercase tracking-widest text-industrial-black hover:text-industrial-warning"
@@ -74,6 +94,34 @@ export default async function ShopPage({ searchParams }: { searchParams?: { tag?
           </Link>
         )}
       </header>
+
+      {drops.length > 0 && (
+        <nav className="flex gap-2 overflow-x-auto pb-4 mb-8 border-b border-industrial-gray/10">
+          <Link
+            href={buildShopHref({ tag: activeTag })}
+            className={`px-4 py-2 border text-[10px] font-bold uppercase tracking-widest whitespace-nowrap ${
+              !activeDrop
+                ? 'bg-industrial-black border-industrial-black text-white'
+                : 'border-industrial-gray/20 text-industrial-gray hover:border-industrial-black'
+            }`}
+          >
+            Todos
+          </Link>
+          {drops.map(drop => (
+            <Link
+              key={drop.id}
+              href={buildShopHref({ drop: drop.slug, tag: activeTag })}
+              className={`px-4 py-2 border text-[10px] font-bold uppercase tracking-widest whitespace-nowrap ${
+                activeDrop === drop.slug
+                  ? 'bg-industrial-black border-industrial-black text-white'
+                  : 'border-industrial-gray/20 text-industrial-gray hover:border-industrial-black'
+              }`}
+            >
+              {drop.name}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       {products.length === 0 ? (
         <div className="border border-dashed border-industrial-gray/30 py-20 text-center">
