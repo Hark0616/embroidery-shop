@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { updateDeliveryTime } from '@/lib/actions/config'
+import { updateDeliveryTime, updateWhatsAppConfig } from '@/lib/actions/config'
 
 function SubmitButton() {
     const { pending } = useFormStatus()
@@ -85,6 +85,82 @@ export default function ConfigForm({ initialMessage }: { initialMessage: string 
                 >
                     Cancelar
                 </a>
+            </div>
+        </form>
+    )
+}
+
+export function WhatsAppConfigForm({
+    initialPhone,
+    initialMessage,
+}: {
+    initialPhone: string
+    initialMessage: string
+}) {
+    const [success, setSuccess] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    async function clientAction(formData: FormData) {
+        setSuccess(false)
+        setError(null)
+
+        try {
+            await updateWhatsAppConfig(formData)
+            setSuccess(true)
+            setTimeout(() => setSuccess(false), 3000)
+        } catch (e) {
+            console.error(e)
+            setError('Hubo un error al guardar WhatsApp. Verifica la consola o la base de datos.')
+        }
+    }
+
+    return (
+        <form action={clientAction} className="space-y-6">
+            {success && (
+                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+                    <strong className="font-bold">Éxito: </strong>
+                    <span className="block sm:inline">WhatsApp actualizado correctamente.</span>
+                </div>
+            )}
+
+            {error && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <strong className="font-bold">Error: </strong>
+                    <span className="block sm:inline">{error}</span>
+                </div>
+            )}
+
+            <div>
+                <label htmlFor="phone" className="block text-industrial-gray text-xs tracking-wide uppercase mb-2 font-bold">
+                    Número de WhatsApp
+                </label>
+                <input
+                    id="phone"
+                    name="phone"
+                    type="text"
+                    required
+                    defaultValue={initialPhone}
+                    className="w-full px-4 py-4 bg-industrial-light border border-industrial-gray/20 text-industrial-black font-bold tracking-wide focus:outline-none focus:ring-2 focus:ring-industrial-warning focus:border-industrial-warning transition-colors duration-200"
+                    placeholder="573013732290"
+                />
+            </div>
+
+            <div>
+                <label htmlFor="whatsapp_message" className="block text-industrial-gray text-xs tracking-wide uppercase mb-2 font-bold">
+                    Mensaje base
+                </label>
+                <input
+                    id="whatsapp_message"
+                    name="message"
+                    type="text"
+                    defaultValue={initialMessage}
+                    className="w-full px-4 py-4 bg-industrial-light border border-industrial-gray/20 text-industrial-black font-bold tracking-wide focus:outline-none focus:ring-2 focus:ring-industrial-warning focus:border-industrial-warning transition-colors duration-200"
+                    placeholder="Hola, quiero hacer un pedido en TEXERE.ART."
+                />
+            </div>
+
+            <div className="pt-4 border-t border-industrial-gray/10 flex gap-4">
+                <SubmitButton />
             </div>
         </form>
     )

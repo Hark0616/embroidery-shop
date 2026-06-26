@@ -1,6 +1,7 @@
 'use server'
 
 import { createDesign } from '@/lib/actions/designs'
+import { DESIGN_MOOD_CATEGORIES, MOOD_LABELS } from '@/lib/moods/catalog'
 
 export default async function NewDesignPage() {
     return (
@@ -28,7 +29,7 @@ export default async function NewDesignPage() {
                     {/* Categoría */}
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-                            Categoría
+                            Categoría / mood público
                         </label>
                         <select
                             name="category"
@@ -36,11 +37,17 @@ export default async function NewDesignPage() {
                             className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
                         >
                             <option value="">Seleccionar...</option>
-                            <option value="Anime">Anime</option>
-                            <option value="Cyberpunk">Cyberpunk</option>
-                            <option value="Minimalist">Minimalist</option>
-                            <option value="Typography">Typography</option>
-                            <option value="Abstract">Abstract</option>
+                            {Object.entries(MOOD_LABELS).map(([mood, { label }]) => (
+                                <optgroup key={mood} label={label}>
+                                    {DESIGN_MOOD_CATEGORIES
+                                        .filter(category => category.mood === mood)
+                                        .map(category => (
+                                            <option key={category.value} value={category.value}>
+                                                {category.label}
+                                            </option>
+                                        ))}
+                                </optgroup>
+                            ))}
                         </select>
                     </div>
 

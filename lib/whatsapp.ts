@@ -1,3 +1,5 @@
+import { DEFAULT_WHATSAPP_PHONE, buildWhatsAppContactUrl } from './config/whatsapp'
+
 export interface OrderDetails {
     productName: string
     designName: string
@@ -6,9 +8,11 @@ export interface OrderDetails {
     totalPrice?: number
 }
 
-export function buildWhatsAppMessage(details: OrderDetails, currentUrl: string): string {
-    const phone = '573013732290' // Configurable or env var
-
+export function buildWhatsAppMessage(
+    details: OrderDetails,
+    currentUrl: string,
+    phone = DEFAULT_WHATSAPP_PHONE,
+): string {
     const text = `
 Hola! 👋 Me interesa armar este pedido personalizado:
 
@@ -22,5 +26,5 @@ Hola! 👋 Me interesa armar este pedido personalizado:
 Quedo atento para confirmar disponibilidad y pago. Gracias!
 `.trim()
 
-    return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
+    return buildWhatsAppContactUrl(phone, text)
 }

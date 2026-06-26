@@ -21,10 +21,10 @@ export default async function NewReadyProductPage() {
     <div className="p-8 bg-industrial-light min-h-screen">
       <div className="max-w-3xl mx-auto bg-white border border-industrial-gray/20 shadow-sm p-8">
         <h1 className="font-heading font-black text-2xl uppercase tracking-tighter text-industrial-black mb-2">
-          Producto Armado
+          Producto listo
         </h1>
         <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest mb-8">
-          Oferta vendible con fotos finales. No depende del Studio publico.
+          Oferta vendible con fotos finales. Impacta home, shop y detalle de compra.
         </p>
 
         <form action={createReadyProduct} className="space-y-8">
@@ -58,7 +58,7 @@ export default async function NewReadyProductPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-                  Drop / categoria
+                  Drop
                 </label>
                 <select
                   name="drop_id"
@@ -291,7 +291,7 @@ export default async function NewReadyProductPage() {
               type="submit"
               className="flex-1 px-6 py-3 bg-industrial-black text-white text-xs font-bold uppercase tracking-widest hover:bg-industrial-gray transition-colors"
             >
-              Crear Producto Armado
+              Crear producto listo
             </button>
           </div>
         </form>

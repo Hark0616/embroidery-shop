@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function Navbar() {
+export default function Navbar({ contactHref }: { contactHref: string }) {
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -36,9 +36,8 @@ export default function Navbar() {
     }, [isMobileMenuOpen]);
 
     const navLinks = [
-        { href: '/shop', label: 'Comprar listo' },
-        { href: '/catalog', label: 'Personalizar' },
-        { href: '/designs', label: 'Diseños' },
+        { href: '/shop', label: 'Drops listos' },
+        { href: '/designs', label: 'Personalizar' },
     ];
 
     return (
@@ -71,11 +70,11 @@ export default function Navbar() {
                                 </Link>
                             ))}
                             <Link
-                                href="https://wa.me/573013732290"
+                                href={contactHref}
                                 target="_blank"
                                 className="bg-industrial-black text-industrial-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors duration-300"
                             >
-                                💬 Contacto
+                                Contacto
                             </Link>
                         </div>
 
@@ -156,12 +155,12 @@ export default function Navbar() {
                                     className="mt-6"
                                 >
                                     <Link
-                                        href="https://wa.me/573013732290"
+                                        href={contactHref}
                                         target="_blank"
                                         onClick={() => setIsMobileMenuOpen(false)}
                                         className="block w-full text-center bg-industrial-black text-white py-4 font-bold uppercase tracking-widest text-sm hover:bg-industrial-warning hover:text-industrial-black transition-colors duration-300"
                                     >
-                                        💬 Contacto por WhatsApp
+                                        Contacto por WhatsApp
                                     </Link>
                                 </motion.div>
                             </div>

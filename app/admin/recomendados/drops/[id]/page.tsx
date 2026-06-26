@@ -1,19 +1,37 @@
-'use server'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { updateDrop } from '@/lib/actions/ready-products'
 
-import { createDrop } from '@/lib/actions/ready-products'
+export default async function EditDropPage({ params }: { params: { id: string } }) {
+  const supabase = await createClient()
 
-export default async function NewDropPage() {
+  if (!supabase) notFound()
+
+  const { data: drop } = await supabase
+    .from('product_drops')
+    .select('*')
+    .eq('id', params.id)
+    .single()
+
+  if (!drop) notFound()
+
   return (
     <div className="p-8 bg-industrial-light min-h-screen">
       <div className="max-w-2xl mx-auto bg-white border border-industrial-gray/20 shadow-sm p-8">
-        <h1 className="font-heading font-black text-2xl uppercase tracking-tighter text-industrial-black mb-2">
-          Nuevo Drop
+        <Link href="/admin/recomendados" className="font-mono text-xs text-industrial-gray uppercase tracking-widest hover:text-industrial-black">
+          ← Volver a drops listos
+        </Link>
+        <h1 className="font-heading font-black text-2xl uppercase tracking-tighter text-industrial-black mt-4 mb-2">
+          Editar drop
         </h1>
         <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest mb-8">
-          Grupo comercial para productos listos, campañas y anuncios.
+          Agrupa productos listos para campañas, home y shop.
         </p>
 
-        <form action={createDrop} className="space-y-6">
+        <form action={updateDrop} className="space-y-6">
+          <input type="hidden" name="drop_id" value={drop.id} />
+
           <div>
             <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
               Nombre del drop
@@ -22,8 +40,8 @@ export default async function NewDropPage() {
               name="name"
               type="text"
               required
+              defaultValue={drop.name}
               className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-              placeholder="Ej: Shonen energy"
             />
           </div>
 
@@ -34,10 +52,9 @@ export default async function NewDropPage() {
             <input
               name="slug"
               type="text"
+              defaultValue={drop.slug}
               className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-              placeholder="shonen-energy"
             />
-            <p className="text-[10px] text-gray-500 mt-1">Puedes dejarlo vacio para generarlo desde el nombre.</p>
           </div>
 
           <div>
@@ -47,14 +64,14 @@ export default async function NewDropPage() {
             <textarea
               name="description"
               rows={4}
+              defaultValue={drop.description || ''}
               className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-              placeholder="Coleccion de prendas bordadas inspiradas en energia anime."
             />
           </div>
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-              Imagen / banner
+              Cambiar imagen / banner
             </label>
             <input
               name="image"
@@ -71,7 +88,7 @@ export default async function NewDropPage() {
               </label>
               <select
                 name="status"
-                defaultValue="draft"
+                defaultValue={drop.status}
                 className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
               >
                 <option value="draft">Borrador</option>
@@ -86,24 +103,24 @@ export default async function NewDropPage() {
               <input
                 name="sort_order"
                 type="number"
-                defaultValue="0"
+                defaultValue={drop.sort_order}
                 className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
               />
             </div>
           </div>
 
           <div className="pt-6 flex gap-4">
-            <a
+            <Link
               href="/admin/recomendados"
               className="px-6 py-3 border border-industrial-gray text-industrial-black text-xs font-bold uppercase tracking-widest hover:bg-gray-50 text-center"
             >
               Cancelar
-            </a>
+            </Link>
             <button
               type="submit"
               className="flex-1 px-6 py-3 bg-industrial-black text-white text-xs font-bold uppercase tracking-widest hover:bg-industrial-gray transition-colors"
             >
-              Crear Drop
+              Guardar drop
             </button>
           </div>
         </form>

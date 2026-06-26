@@ -3,65 +3,18 @@ import Image from 'next/image';
 import { createPublicClient } from '@/lib/supabase/server';
 import MoodSelector from '@/components/MoodSelector';
 import type { ReadyProduct } from '@/lib/types/database';
+import { MOOD_DEFINITIONS } from '@/lib/moods/catalog';
+import { getWhatsAppConfig } from '@/lib/actions/config';
+import { buildWhatsAppContactUrl } from '@/lib/config/whatsapp';
 
 export const revalidate = 60;
-
-// Mood definitions - these map to category values in the DB
-const MOODS = [
-    {
-        mood: 'rebelde',
-        title: 'Rebelde',
-        subtitle: 'Calaveras · Punk · Rock · Fire',
-        icon: '🔥',
-        gradient: 'bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500',
-        categories: ['rebelde', 'punk', 'rock', 'calaveras'],
-    },
-    {
-        mood: 'delicado',
-        title: 'Delicado',
-        subtitle: 'Flores · Mariposas · Naturaleza',
-        icon: '🌸',
-        gradient: 'bg-gradient-to-br from-pink-400 via-rose-300 to-purple-300',
-        categories: ['delicado', 'flores', 'naturaleza', 'botanico'],
-    },
-    {
-        mood: 'geek',
-        title: 'Geek',
-        subtitle: 'Anime · Gaming · Pixel Art · Sci-Fi',
-        icon: '🎮',
-        gradient: 'bg-gradient-to-br from-violet-600 via-blue-500 to-cyan-400',
-        categories: ['geek', 'anime', 'gaming', 'pixel'],
-    },
-    {
-        mood: 'tierno',
-        title: 'Tierno',
-        subtitle: 'Animales · Kawaii · Cute · Cartoon',
-        icon: '🐾',
-        gradient: 'bg-gradient-to-br from-amber-300 via-yellow-200 to-orange-200',
-        categories: ['tierno', 'kawaii', 'animales', 'cute'],
-    },
-    {
-        mood: 'minimal',
-        title: 'Minimal',
-        subtitle: 'Líneas · Geométrico · Abstracto',
-        icon: '◯',
-        gradient: 'bg-gradient-to-br from-gray-800 via-gray-600 to-gray-400',
-        categories: ['minimal', 'geometrico', 'abstracto', 'lineas'],
-    },
-    {
-        mood: 'custom',
-        title: 'Tu Diseño',
-        subtitle: 'Trae tu imagen · Hazlo único',
-        icon: '✨',
-        gradient: 'bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-500',
-        categories: [],
-    },
-];
 
 export default async function Home() {
     const supabase = createPublicClient();
     let recentDesigns: any[] = [];
     let recommendedProducts: ReadyProduct[] = [];
+    const whatsapp = await getWhatsAppConfig();
+    const contactHref = buildWhatsAppContactUrl(whatsapp.phone, whatsapp.message);
 
     if (supabase) {
         const [{ data }, { data: readyProducts }] = await Promise.all([
@@ -111,21 +64,17 @@ export default async function Home() {
                     {/* Craft badge */}
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-8 border border-industrial-warning/30 text-industrial-warning">
                         <span className="w-1.5 h-1.5 bg-industrial-warning rounded-full animate-pulse" />
-                        <span className="font-mono text-[10px] tracking-[0.3em] uppercase">Drops listos + bordados personalizados</span>
+                        <span className="font-mono text-[10px] tracking-[0.3em] uppercase">Drops listos para pedir</span>
                     </div>
 
                     <h1 className="font-heading font-black text-5xl md:text-7xl lg:text-8xl tracking-tighter mb-6 uppercase leading-[0.9]">
-                        Bordados
+                        Bordados listos{' '}
                         <br />
-                        <span className="text-industrial-warning">listos</span>
-                        <br />
-                        <span className="text-3xl md:text-4xl lg:text-5xl tracking-tight font-bold text-gray-500">o hechos a tu estilo</span>
+                        <span className="text-industrial-warning">para pedir</span>
                     </h1>
 
                     <p className="font-mono text-xs md:text-sm text-gray-500 mb-10 max-w-md mx-auto tracking-widest uppercase leading-relaxed">
-                        Compra un drop ya armado.
-                        <br />
-                        O elige un diseño y combínalo con tu prenda.
+                        Elige una prenda ya armada o personaliza la tuya desde nuestro catálogo de diseños.
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -133,16 +82,16 @@ export default async function Home() {
                             href="/shop"
                             className="inline-flex items-center justify-center gap-2 bg-industrial-warning text-industrial-black font-bold text-sm px-8 py-4 uppercase tracking-widest hover:bg-white transition-colors duration-300"
                         >
-                            <span>Comprar drops</span>
+                            <span>Ver drops listos</span>
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                             </svg>
                         </Link>
                         <Link
-                            href="#moods"
+                            href="/designs"
                             className="inline-flex items-center justify-center gap-2 border border-white/30 text-white font-bold text-sm px-8 py-4 uppercase tracking-widest hover:bg-white/10 transition-colors duration-300"
                         >
-                            Explorar diseños
+                            Crear uno personalizado
                         </Link>
                     </div>
                 </div>
@@ -151,26 +100,26 @@ export default async function Home() {
                 <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-industrial-light to-transparent" />
             </section>
 
-            {recommendedProducts.length > 0 && (
-                <section className="py-16 md:py-24 px-4 bg-white border-b border-industrial-gray/10">
-                    <div className="max-w-7xl mx-auto">
-                        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
-                            <div>
-                                <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest mb-3">
-                                    Listo para pedir
-                                </p>
-                                <h2 className="font-heading font-black text-3xl md:text-5xl uppercase tracking-tighter text-industrial-black">
-                                    Recomendados
-                                </h2>
-                            </div>
-                            <Link
-                                href="/shop"
-                                className="inline-flex items-center justify-center border border-industrial-black px-5 py-3 text-xs font-bold uppercase tracking-widest hover:bg-industrial-black hover:text-white transition-colors"
-                            >
-                                Ver tienda
-                            </Link>
+            <section className="py-16 md:py-24 px-4 bg-white border-b border-industrial-gray/10">
+                <div className="max-w-7xl mx-auto">
+                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
+                        <div>
+                            <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest mb-3">
+                                Listo para pedir
+                            </p>
+                            <h2 className="font-heading font-black text-3xl md:text-5xl uppercase tracking-tighter text-industrial-black">
+                                Drops destacados
+                            </h2>
                         </div>
+                        <Link
+                            href="/shop"
+                            className="inline-flex items-center justify-center border border-industrial-black px-5 py-3 text-xs font-bold uppercase tracking-widest hover:bg-industrial-black hover:text-white transition-colors"
+                        >
+                            Ver todos los drops
+                        </Link>
+                    </div>
 
+                    {recommendedProducts.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
                             {recommendedProducts.map(product => (
                                 <Link
@@ -201,30 +150,51 @@ export default async function Home() {
                                                 ${Number(product.price || 0).toLocaleString('es-CO')}
                                             </p>
                                             <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                                                Comprar
+                                                Ver drop
                                             </span>
                                         </div>
                                     </div>
                                 </Link>
                             ))}
                         </div>
-                    </div>
-                </section>
-            )}
+                    ) : (
+                        <div className="border border-dashed border-industrial-gray/30 px-6 py-12 md:py-16 text-center">
+                            <p className="font-mono text-xs uppercase tracking-widest text-industrial-gray max-w-xl mx-auto leading-relaxed">
+                                Estamos preparando nuevos drops listos. Mientras tanto puedes pedir por WhatsApp o crear uno personalizado desde el catálogo.
+                            </p>
+                            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                                <Link
+                                    href={contactHref}
+                                    target="_blank"
+                                    className="inline-flex w-full sm:w-auto items-center justify-center bg-industrial-black text-white px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                                >
+                                    Pedir por WhatsApp
+                                </Link>
+                                <Link
+                                    href="/designs"
+                                    className="inline-flex w-full sm:w-auto items-center justify-center border border-industrial-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-industrial-black hover:text-white transition-colors"
+                                >
+                                    Crear uno personalizado
+                                </Link>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </section>
 
             {/* ─── Mood Selector ─── */}
             <section id="moods" className="py-20 md:py-28 px-4 bg-industrial-light scroll-mt-16">
                 <div className="max-w-7xl mx-auto">
                     <div className="mb-12 md:mb-16">
                         <h2 className="font-heading font-black text-3xl md:text-5xl uppercase tracking-tighter text-industrial-black mb-3">
-                            Diseños por <span className="text-industrial-warning">estilo</span>
+                            Personaliza por <span className="text-industrial-warning">estilo</span>
                         </h2>
                         <p className="font-mono text-xs md:text-sm text-industrial-gray uppercase tracking-widest max-w-lg">
                             Elige un estilo, selecciona un diseño del catálogo y luego llévalo al Studio para ponerlo en una prenda.
                         </p>
                     </div>
 
-                    <MoodSelector moods={MOODS} designs={recentDesigns} />
+                    <MoodSelector moods={MOOD_DEFINITIONS} designs={recentDesigns} />
                 </div>
             </section>
 
@@ -233,37 +203,31 @@ export default async function Home() {
                 <div className="max-w-5xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="font-heading font-black text-3xl md:text-4xl uppercase tracking-tighter text-industrial-black mb-3">
-                            Cómo <span className="text-industrial-warning">Funciona</span>
+                            Dos formas <span className="text-industrial-warning">de pedir</span>
                         </h2>
                         <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest">
-                            Dos caminos claros · Compra listo o arma el tuyo
+                            Compra listo o arma el tuyo
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
                         {[
                             {
                                 step: '01',
-                                title: 'Compra listo',
-                                description: 'Elige un drop armado con foto final, precio claro, talla y color.',
+                                title: 'Comprar listo',
+                                description: 'Ves el resultado final, eliges talla y color, y confirmas el pedido por WhatsApp.',
                                 icon: '🎨',
                             },
                             {
                                 step: '02',
                                 title: 'Personaliza',
-                                description: 'Explora diseños por estilo y combínalos con una prenda base en el Studio.',
+                                description: 'Entras al catálogo de diseños, escoges un estilo y lo llevas a una prenda base.',
                                 icon: '⚙️',
-                            },
-                            {
-                                step: '03',
-                                title: 'Confirma',
-                                description: 'En ambos casos cerramos detalles, producción y entrega por WhatsApp.',
-                                icon: '📦',
                             },
                         ].map((item, i) => (
                             <div key={i} className="group text-center relative">
                                 {/* Connection line */}
-                                {i < 2 && (
+                                {i < 1 && (
                                     <div className="hidden md:block absolute top-8 left-[60%] w-[80%] h-px border-t border-dashed border-industrial-gray/20" />
                                 )}
                                 <div className="text-4xl mb-6 transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300">

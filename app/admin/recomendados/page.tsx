@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { toggleReadyProductFeatured, updateReadyProductStatus } from '@/lib/actions/ready-products'
 import type { ProductDrop, ReadyProduct } from '@/lib/types/database'
 
 type ReadyProductWithDrop = ReadyProduct & {
@@ -40,10 +41,10 @@ export default async function AdminRecommendedPage() {
       <div className="flex items-center justify-between mb-10">
         <div>
           <h1 className="font-heading font-black text-3xl uppercase tracking-tighter text-industrial-black">
-            Recomendados
+            Drops listos
           </h1>
           <p className="font-mono text-xs text-industrial-gray mt-2 uppercase tracking-widest">
-            Drops y productos armados con fotos finales para venta directa.
+            Productos finales con foto, precio, tallas y colores para vender directo en home y shop.
           </p>
         </div>
         <div className="flex gap-3">
@@ -57,7 +58,7 @@ export default async function AdminRecommendedPage() {
             href="/admin/recomendados/productos/new"
             className="px-5 py-3 bg-industrial-black text-white text-xs font-bold uppercase tracking-widest hover:bg-industrial-gray transition-colors"
           >
-            + Producto Armado
+            + Producto listo
           </Link>
         </div>
       </div>
@@ -65,7 +66,7 @@ export default async function AdminRecommendedPage() {
       <section className="grid grid-cols-1 xl:grid-cols-[0.8fr_1.2fr] gap-8">
         <div className="bg-white border border-industrial-gray/20 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-industrial-gray/10 flex items-center justify-between">
-            <h2 className="font-heading font-black text-lg uppercase tracking-tight">Drops / Categorias</h2>
+            <h2 className="font-heading font-black text-lg uppercase tracking-tight">Drops</h2>
             <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
               {dropRows.length} total
             </span>
@@ -81,7 +82,7 @@ export default async function AdminRecommendedPage() {
                     <div className="h-full w-full flex items-center justify-center text-gray-300 text-xs">DROP</div>
                   )}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold uppercase tracking-tight truncate">{drop.name}</h3>
                     <span className="text-[9px] font-mono uppercase tracking-widest bg-gray-100 px-2 py-0.5">
@@ -94,6 +95,12 @@ export default async function AdminRecommendedPage() {
                   {drop.description && (
                     <p className="text-xs text-industrial-gray mt-2 line-clamp-2">{drop.description}</p>
                   )}
+                  <Link
+                    href={`/admin/recomendados/drops/${drop.id}`}
+                    className="inline-block mt-3 font-bold uppercase tracking-widest text-[10px] text-industrial-black hover:underline"
+                  >
+                    Editar drop
+                  </Link>
                 </div>
               </div>
             ))}
@@ -107,7 +114,7 @@ export default async function AdminRecommendedPage() {
 
         <div className="bg-white border border-industrial-gray/20 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-industrial-gray/10 flex items-center justify-between">
-            <h2 className="font-heading font-black text-lg uppercase tracking-tight">Productos Armados</h2>
+            <h2 className="font-heading font-black text-lg uppercase tracking-tight">Productos listos</h2>
             <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
               {productRows.length} total
             </span>
@@ -120,6 +127,7 @@ export default async function AdminRecommendedPage() {
                 <th className="px-5 py-3 font-normal">Drop</th>
                 <th className="px-5 py-3 font-normal text-right">Precio</th>
                 <th className="px-5 py-3 font-normal text-center">Estado</th>
+                <th className="px-5 py-3 font-normal text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-industrial-gray/10">
@@ -153,12 +161,54 @@ export default async function AdminRecommendedPage() {
                       {statusLabel(product.status)}
                     </span>
                   </td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Link
+                          href={`/admin/recomendados/productos/${product.id}`}
+                          className="font-bold uppercase tracking-widest text-[10px] text-industrial-black hover:underline"
+                        >
+                          Editar
+                        </Link>
+                        <Link
+                          href={`/shop/${product.slug}`}
+                          target="_blank"
+                          className="font-bold uppercase tracking-widest text-[10px] text-industrial-gray hover:text-industrial-black hover:underline"
+                        >
+                          Ver tienda
+                        </Link>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <form action={updateReadyProductStatus}>
+                          <input type="hidden" name="product_id" value={product.id} />
+                          <input type="hidden" name="status" value={product.status === 'sold_out' ? 'published' : 'sold_out'} />
+                          <button type="submit" className="font-bold uppercase tracking-widest text-[10px] text-industrial-gray hover:text-industrial-black">
+                            {product.status === 'sold_out' ? 'Reactivar' : 'Agotar'}
+                          </button>
+                        </form>
+                        <form action={updateReadyProductStatus}>
+                          <input type="hidden" name="product_id" value={product.id} />
+                          <input type="hidden" name="status" value={product.status === 'hidden' ? 'published' : 'hidden'} />
+                          <button type="submit" className="font-bold uppercase tracking-widest text-[10px] text-industrial-gray hover:text-industrial-black">
+                            {product.status === 'hidden' ? 'Publicar' : 'Ocultar'}
+                          </button>
+                        </form>
+                        <form action={toggleReadyProductFeatured}>
+                          <input type="hidden" name="product_id" value={product.id} />
+                          <input type="hidden" name="is_featured" value={product.is_featured ? 'false' : 'true'} />
+                          <button type="submit" className="font-bold uppercase tracking-widest text-[10px] text-industrial-gray hover:text-industrial-black">
+                            {product.is_featured ? 'Quitar home' : 'Destacar'}
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {productRows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-industrial-gray font-mono text-xs uppercase tracking-widest">
-                    Aun no hay productos armados.
+                  <td colSpan={6} className="px-6 py-12 text-center text-industrial-gray font-mono text-xs uppercase tracking-widest">
+                    Aun no hay productos listos.
                   </td>
                 </tr>
               )}
