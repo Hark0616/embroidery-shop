@@ -1,6 +1,7 @@
 'use client';
 
 import MoodCard from './MoodCard';
+import { buildMoodHref } from '@/lib/moods';
 
 interface MoodDef {
     mood: string;
@@ -31,10 +32,6 @@ export default function MoodSelector({ moods, designs }: MoodSelectorProps) {
                     .map(d => d.image_url)
                     .filter(Boolean);
 
-                const href = m.mood === 'custom'
-                    ? '/shop'
-                    : `/shop?tag=${m.mood}`;
-
                 return (
                     <MoodCard
                         key={m.mood}
@@ -43,7 +40,7 @@ export default function MoodSelector({ moods, designs }: MoodSelectorProps) {
                         subtitle={m.subtitle}
                         icon={m.icon}
                         gradient={m.gradient}
-                        href={href}
+                        href={buildMoodHref(m.mood)}
                         previewImages={previewImages}
                         index={index}
                     />

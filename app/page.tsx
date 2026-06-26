@@ -111,21 +111,21 @@ export default async function Home() {
                     {/* Craft badge */}
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-8 border border-industrial-warning/30 text-industrial-warning">
                         <span className="w-1.5 h-1.5 bg-industrial-warning rounded-full animate-pulse" />
-                        <span className="font-mono text-[10px] tracking-[0.3em] uppercase">Prendas bordadas listas para pedir</span>
+                        <span className="font-mono text-[10px] tracking-[0.3em] uppercase">Drops listos + bordados personalizados</span>
                     </div>
 
                     <h1 className="font-heading font-black text-5xl md:text-7xl lg:text-8xl tracking-tighter mb-6 uppercase leading-[0.9]">
                         Bordados
                         <br />
-                        <span className="text-industrial-warning">ya armados</span>
+                        <span className="text-industrial-warning">listos</span>
                         <br />
-                        <span className="text-3xl md:text-4xl lg:text-5xl tracking-tight font-bold text-gray-500">para usar hoy</span>
+                        <span className="text-3xl md:text-4xl lg:text-5xl tracking-tight font-bold text-gray-500">o hechos a tu estilo</span>
                     </h1>
 
                     <p className="font-mono text-xs md:text-sm text-gray-500 mb-10 max-w-md mx-auto tracking-widest uppercase leading-relaxed">
-                        Elige una prenda con diseño listo.
+                        Compra un drop ya armado.
                         <br />
-                        Confirma talla y color por WhatsApp.
+                        O elige un diseño y combínalo con tu prenda.
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -133,7 +133,7 @@ export default async function Home() {
                             href="/shop"
                             className="inline-flex items-center justify-center gap-2 bg-industrial-warning text-industrial-black font-bold text-sm px-8 py-4 uppercase tracking-widest hover:bg-white transition-colors duration-300"
                         >
-                            <span>Ver tienda</span>
+                            <span>Comprar drops</span>
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                             </svg>
@@ -142,7 +142,7 @@ export default async function Home() {
                             href="#moods"
                             className="inline-flex items-center justify-center gap-2 border border-white/30 text-white font-bold text-sm px-8 py-4 uppercase tracking-widest hover:bg-white/10 transition-colors duration-300"
                         >
-                            Explorar estilos
+                            Explorar diseños
                         </Link>
                     </div>
                 </div>
@@ -217,10 +217,10 @@ export default async function Home() {
                 <div className="max-w-7xl mx-auto">
                     <div className="mb-12 md:mb-16">
                         <h2 className="font-heading font-black text-3xl md:text-5xl uppercase tracking-tighter text-industrial-black mb-3">
-                            Compra por <span className="text-industrial-warning">estilo</span>
+                            Diseños por <span className="text-industrial-warning">estilo</span>
                         </h2>
                         <p className="font-mono text-xs md:text-sm text-industrial-gray uppercase tracking-widest max-w-lg">
-                            Usa estas rutas para encontrar prendas armadas por mood, drop o campaña.
+                            Elige un estilo, selecciona un diseño del catálogo y luego llévalo al Studio para ponerlo en una prenda.
                         </p>
                     </div>
 
@@ -236,7 +236,7 @@ export default async function Home() {
                             Cómo <span className="text-industrial-warning">Funciona</span>
                         </h2>
                         <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest">
-                            3 pasos simples · Menos dudas antes de comprar
+                            Dos caminos claros · Compra listo o arma el tuyo
                         </p>
                     </div>
 
@@ -244,20 +244,20 @@ export default async function Home() {
                         {[
                             {
                                 step: '01',
-                                title: 'Elige',
-                                description: 'Selecciona una prenda armada con fotos finales y precio claro.',
+                                title: 'Compra listo',
+                                description: 'Elige un drop armado con foto final, precio claro, talla y color.',
                                 icon: '🎨',
                             },
                             {
                                 step: '02',
-                                title: 'Confirma',
-                                description: 'Escoge talla y color disponibles, luego confirma el pedido por WhatsApp.',
+                                title: 'Personaliza',
+                                description: 'Explora diseños por estilo y combínalos con una prenda base en el Studio.',
                                 icon: '⚙️',
                             },
                             {
                                 step: '03',
-                                title: 'Recibe',
-                                description: 'Lo producimos bajo pedido y coordinamos la entrega contigo.',
+                                title: 'Confirma',
+                                description: 'En ambos casos cerramos detalles, producción y entrega por WhatsApp.',
                                 icon: '📦',
                             },
                         ].map((item, i) => (
@@ -287,7 +287,7 @@ export default async function Home() {
                             href="/shop"
                             className="inline-flex items-center gap-2 bg-industrial-black text-white font-bold text-sm px-10 py-4 uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors duration-300"
                         >
-                            Ver Recomendados
+                            Ver Drops Listos
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                             </svg>
