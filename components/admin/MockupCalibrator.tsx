@@ -13,6 +13,7 @@ import {
   normalizeSurface,
   reinterpolateFromCorners,
 } from '@/lib/mesh-utils'
+import { getMockupVariants } from '@/lib/mockup-variants'
 
 type SurfaceMap = Record<string, CalibrationSurface>
 type EditMode = 'corners' | 'grid' | 'preview'
@@ -39,32 +40,36 @@ const SIZE_LABELS: Record<string, string> = {
 
 const SURFACE_PRESETS: Record<string, Array<{ id: string; label: string; size: CalibrationSurface['size'] }>> = {
   apparel: [
-    { id: 'pecho-centro', label: 'Pecho centro', size: 'medium' },
-    { id: 'pecho-izquierdo', label: 'Pecho izquierdo', size: 'small' },
-    { id: 'espalda-centro', label: 'Espalda centro', size: 'large' },
+    { id: 'pecho-centro', label: 'Centro Pecho', size: 'medium' },
+    { id: 'pecho-izquierdo', label: 'Pecho Izquierdo (Logo)', size: 'small' },
+    { id: 'espalda-centro', label: 'Espalda Grande', size: 'large' },
     { id: 'manga', label: 'Manga', size: 'small' },
   ],
   hoodie: [
-    { id: 'pecho-centro', label: 'Pecho centro', size: 'medium' },
-    { id: 'pecho-izquierdo', label: 'Pecho izquierdo', size: 'small' },
-    { id: 'espalda-centro', label: 'Espalda centro', size: 'large' },
+    { id: 'pecho-centro', label: 'Centro Pecho', size: 'medium' },
+    { id: 'pecho-izquierdo', label: 'Pecho Izquierdo (Logo)', size: 'small' },
+    { id: 'espalda-centro', label: 'Espalda Grande', size: 'large' },
     { id: 'manga', label: 'Manga', size: 'small' },
   ],
   gorra: [
-    { id: 'frente-centro', label: 'Frente centro', size: 'small' },
-    { id: 'lateral', label: 'Lateral', size: 'small' },
+    { id: 'frente-centro', label: 'Frente Centro', size: 'small' },
+    { id: 'lateral-izquierdo', label: 'Lateral Izquierdo', size: 'small' },
   ],
   tote: [
     { id: 'centro', label: 'Centro', size: 'large' },
-    { id: 'frente-bajo', label: 'Frente bajo', size: 'medium' },
+    { id: 'frente-bajo', label: 'Frente Bajo', size: 'medium' },
   ],
 }
 
-function getPresetGroup(productType?: string | null) {
-  const normalized = (productType || '').toLowerCase()
-  if (normalized.includes('gorra') || normalized.includes('cap')) return SURFACE_PRESETS.gorra
-  if (normalized.includes('hoodie')) return SURFACE_PRESETS.hoodie
-  if (normalized.includes('tote') || normalized.includes('bolso')) return SURFACE_PRESETS.tote
+function getPresetGroup(productType?: string | null, name?: string | null, slug?: string | null) {
+  const normalizedType = (productType || '').toLowerCase()
+  const normalizedName = (name || '').toLowerCase()
+  const normalizedSlug = (slug || '').toLowerCase()
+  const combined = `${normalizedType} ${normalizedName} ${normalizedSlug}`
+  
+  if (combined.includes('gorra') || combined.includes('cap')) return SURFACE_PRESETS.gorra
+  if (combined.includes('hoodie')) return SURFACE_PRESETS.hoodie
+  if (combined.includes('tote') || combined.includes('bolso')) return SURFACE_PRESETS.tote
   return SURFACE_PRESETS.apparel
 }
 
@@ -140,6 +145,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   }, [mockup.surfaces])
 
   const initialActiveId = Object.keys(initialSurfaces)[0] || ''
+  const mockupVariants = useMemo(() => getMockupVariants(mockup), [mockup])
 
   const history = useHistory({ surfaces: initialSurfaces, activeId: initialActiveId })
   const { surfaces, activeId } = history.state
@@ -147,8 +153,8 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [editMode, setEditMode] = useState<EditMode>('corners')
   const [draftLabel, setDraftLabel] = useState('Pecho centro')
   const [previewDesignId, setPreviewDesignId] = useState(designs[0]?.id || '')
+  const [previewVariantId, setPreviewVariantId] = useState(mockupVariants[0]?.id || '')
   const [isPublic, setIsPublic] = useState(mockup.is_public)
-  const [shadowIntensity, setShadowIntensity] = useState(70)
   const [saveMessage, setSaveMessage] = useState('')
   const [isPending, startTransition] = useTransition()
   const [dragPointIndex, setDragPointIndex] = useState<number | null>(null)
@@ -158,6 +164,19 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 })
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
+
+  const previewVariant = useMemo(
+    () => mockupVariants.find(variant => variant.id === previewVariantId) || mockupVariants[0],
+    [mockupVariants, previewVariantId],
+  )
+  const previewMockupImage = previewVariant?.imageUrl || mockup.image_url
+  const previewShadowMap = previewVariant?.shadowMapUrl || mockup.shadow_map_url
+
+  useEffect(() => {
+    if (mockupVariants.length > 0 && !mockupVariants.some(variant => variant.id === previewVariantId)) {
+      setPreviewVariantId(mockupVariants[0].id)
+    }
+  }, [mockupVariants, previewVariantId])
 
   // Synchronize fullscreen state with browser native fullscreen
   useEffect(() => {
@@ -207,6 +226,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
   const activeSurface = activeId ? surfaces[activeId] : null
   const normalizedActive = activeSurface ? normalizeSurface(activeSurface, DEFAULT_GRID_SIZE) : null
+  const shadowIntensity = Math.round((normalizedActive?.shadowOpacity ?? 0.7) * 100)
 
   // Stable zoom origin to prevent cursor feedback loop when dragging points while zoomed in
   useEffect(() => {
@@ -229,8 +249,12 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   }, [activeId, isZoomed])
 
   const presetSurfaces = useMemo(
-    () => getPresetGroup(mockup.base_products?.product_type),
-    [mockup.base_products?.product_type],
+    () => getPresetGroup(
+      mockup.base_products?.product_type,
+      mockup.base_products?.name,
+      mockup.base_products?.slug
+    ),
+    [mockup.base_products?.product_type, mockup.base_products?.name, mockup.base_products?.slug],
   )
   const previewDesign = useMemo(
     () => designs.find(d => d.id === previewDesignId) || designs[0],
@@ -258,8 +282,8 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     history.push({ surfaces: newSurfaces, activeId: newActiveId ?? activeId })
   }
 
-  const addSurface = (label = draftLabel, size: CalibrationSurface['size'] = 'medium') => {
-    const id = normalizeId(label || 'zona')
+  const addSurface = (label = draftLabel, size: CalibrationSurface['size'] = 'medium', explicitId?: string) => {
+    const id = explicitId || normalizeId(label || 'zona')
     if (!id) return
     const uniqueId = surfaces[id] ? `${id}-${Object.keys(surfaces).length + 1}` : id
     const next = createMeshSurface(uniqueId, label || uniqueId, mockup.view, size, DEFAULT_GRID_SIZE)
@@ -440,7 +464,11 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
           status: nextStatus,
           isPublic: nextIsPublic,
         })
-        setSaveMessage(`✓ Guardado como ${result.status}.`)
+        setSaveMessage(
+          nextIsPublic
+            ? `✓ Publicado. Ya puede aparecer en Studio público.`
+            : `✓ Guardado privado. Para verlo en Studio público usa "Publicar mockup".`,
+        )
       } catch (error) {
         setSaveMessage(error instanceof Error ? error.message : 'No se pudo guardar.')
       }
@@ -522,9 +550,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 onClick={() => save()}
                 disabled={isPending}
                 className="h-8 px-3 flex items-center justify-center border border-industrial-black bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
-                title="Guardar calibración actual (Ctrl+S)"
+                title={isPublic ? 'Guardar cambios del mockup publicado (Ctrl+S)' : 'Guardar calibración privada (Ctrl+S)'}
               >
-                {isPending ? '💾 ...' : '💾 Guardar'}
+                {isPending ? '💾 ...' : isPublic ? '💾 Guardar publicado' : '💾 Guardar privado'}
               </button>
 
               {/* Undo/Redo */}
@@ -557,6 +585,35 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               </div>
             </div>
           </div>
+
+          {mockupVariants.length > 1 && (
+            <div className="w-full border border-industrial-gray/10 bg-gray-50 p-3 mb-4">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-2">
+                Visualizar color del mockup
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {mockupVariants.map(variant => (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() => setPreviewVariantId(variant.id)}
+                    className={`flex-shrink-0 border px-3 py-2 text-left transition-colors ${
+                      previewVariant?.id === variant.id
+                        ? 'border-industrial-black bg-industrial-black text-white'
+                        : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
+                    }`}
+                  >
+                    <span className="block font-bold text-[10px] uppercase tracking-widest">
+                      {variant.colorName || 'Base'}
+                    </span>
+                    <span className="block font-mono text-[9px] uppercase tracking-widest opacity-60 mt-1">
+                      Misma calibracion
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Edit mode tabs & Zoom/Fullscreen Controls */}
           <div className="w-full flex items-center justify-between gap-4 mb-4 flex-wrap">
@@ -651,7 +708,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
             >
               {/* Base mockup image */}
               <Image
-                src={mockup.image_url}
+                src={previewMockupImage}
                 alt={mockup.name}
                 fill
                 priority
@@ -671,9 +728,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               )}
 
               {/* Shadow map */}
-              {mockup.shadow_map_url && (
+              {previewShadowMap && (
                 <Image
-                  src={mockup.shadow_map_url}
+                  src={previewShadowMap}
                   alt=""
                   fill
                   className="object-contain mix-blend-multiply pointer-events-none"
@@ -787,7 +844,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 <button
                   key={preset.id}
                   type="button"
-                  onClick={() => addSurface(preset.label, preset.size)}
+                  onClick={() => addSurface(preset.label, preset.size, preset.id)}
                   className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
                 >
                   <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
@@ -943,7 +1000,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 </div>
 
                 {/* Shadow map intensity */}
-                {mockup.shadow_map_url && (
+                {previewShadowMap && (
                   <label className="block">
                     <span className="block font-bold text-xs uppercase tracking-widest mb-2">
                       Intensidad de sombras — {shadowIntensity}%
@@ -953,7 +1010,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                       min="0"
                       max="100"
                       value={shadowIntensity}
-                      onChange={e => setShadowIntensity(Number(e.target.value))}
+                      onChange={e => updateActiveSurface(s => ({ ...s, shadowOpacity: Number(e.target.value) / 100 }))}
                       className="w-full accent-yellow-500"
                     />
                   </label>

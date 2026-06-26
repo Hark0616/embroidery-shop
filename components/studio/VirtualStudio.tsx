@@ -9,8 +9,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { applyMoodTheme } from '@/lib/theme';
-import { getPlacementsForProduct } from '@/lib/placements';
 import { uploadCustomDesign } from '@/lib/supabase/storage';
+import { COLOR_MAP } from '@/lib/colors';
+import { getMockupImageForColor, getMockupShadowForColor } from '@/lib/mockup-variants';
 
 interface VirtualStudioProps {
     products: BaseProduct[];
@@ -20,13 +21,14 @@ interface VirtualStudioProps {
 
 type StudioStep = 'product' | 'design' | 'details' | 'checkout';
 
-const THREAD_COLORS = [
-    { id: 'original', name: 'Original', css: 'none' },
-    { id: 'oro', name: 'Oro Metálico', css: 'sepia(1) hue-rotate(5deg) saturate(3) brightness(1.1) contrast(1.2)' },
-    { id: 'plata', name: 'Plata Metálico', css: 'grayscale(1) brightness(1.5) contrast(1.1)' },
-    { id: 'blanco', name: 'Blanco', css: 'grayscale(1) brightness(2)' },
-    { id: 'negro', name: 'Negro', css: 'grayscale(1) brightness(0)' },
-];
+function hasCalibratedSurfaces(mockup: GarmentMockup) {
+    return !!(
+        mockup.surfaces &&
+        typeof mockup.surfaces === 'object' &&
+        !Array.isArray(mockup.surfaces) &&
+        Object.keys(mockup.surfaces).length > 0
+    );
+}
 
 export default function VirtualStudio({ products, designs, mockups = [] }: VirtualStudioProps) {
     const router = useRouter();
@@ -36,25 +38,26 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     const initialProductSlug = searchParams.get('product');
     const initialDesignId = searchParams.get('design');
     const isCustomMode = searchParams.get('custom') === 'true';
+    const initialProduct = products.find(p => p.slug === initialProductSlug) || null;
+    const initialDesign = designs.find(d => d.id === initialDesignId) || null;
 
     const [selectedProduct, setSelectedProduct] = useState<BaseProduct | null>(
-        products.find(p => p.slug === initialProductSlug) || null
+        initialProduct
     );
 
     const [selectedDesign, setSelectedDesign] = useState<EmbroideryDesign | null>(
-        designs.find(d => d.id === initialDesignId) || null
+        initialDesign
     );
 
     const [activeStep, setActiveStep] = useState<StudioStep>(() => {
-        if (initialProductSlug && initialDesignId) return 'details';
-        if (initialProductSlug) return 'design';
-        if (initialDesignId) return 'product';
+        if (initialProduct && (initialDesign || isCustomMode)) return 'details';
+        if (initialProduct) return 'design';
+        if (initialDesign || isCustomMode) return 'product';
         return 'product';
     });
 
     const [selectedColor, setSelectedColor] = useState<string>('');
     const [selectedSize, setSelectedSize] = useState<string>('');
-    const [selectedThread, setSelectedThread] = useState<string>('original');
     const [selectedMockupId, setSelectedMockupId] = useState<string>('');
     
     // Placement State
@@ -74,15 +77,12 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
 
     const productMockups = useMemo(() => {
         if (!selectedProduct) return [];
-        return mockups.filter(mockup => mockup.product_id === selectedProduct.id);
+        return mockups.filter(mockup => mockup.product_id === selectedProduct.id && hasCalibratedSurfaces(mockup));
     }, [mockups, selectedProduct]);
 
     const visibleMockups = useMemo(() => {
-        if (!selectedColor) return productMockups;
-        const normalizedColor = selectedColor.toLowerCase();
-        const exact = productMockups.filter(mockup => mockup.color_name?.toLowerCase() === normalizedColor);
-        return exact.length > 0 ? exact : productMockups;
-    }, [productMockups, selectedColor]);
+        return productMockups;
+    }, [productMockups]);
 
     const selectedMockup = useMemo(() => {
         if (visibleMockups.length === 0) return null;
@@ -98,18 +98,50 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
         ) {
             return selectedMockup.surfaces as Record<string, CalibrationSurface>;
         }
+
         return null;
     }, [selectedMockup]);
 
     const placements = useMemo(() => {
-        if (calibratedSurfaces) {
-            return calibratedSurfaces;
+        const allCalibrated: Record<string, any> = {};
+        
+        productMockups.forEach(mockup => {
+            if (
+                mockup.surfaces &&
+                typeof mockup.surfaces === 'object' &&
+                !Array.isArray(mockup.surfaces)
+            ) {
+                const surfaces = mockup.surfaces as Record<string, CalibrationSurface>;
+                Object.entries(surfaces).forEach(([key, surface]) => {
+                    allCalibrated[key] = {
+                        ...surface,
+                        view: surface.view || 'front',
+                        label: surface.label || key,
+                    };
+                });
+            }
+        });
+        
+        return allCalibrated;
+    }, [productMockups]);
+
+    // Automatically sync mockup selection with placement view and selected color
+    useEffect(() => {
+        const placementView = placements[activePlacement]?.view || 'front';
+        const matchingMockup = visibleMockups.find(
+            m =>
+                m.surfaces &&
+                typeof m.surfaces === 'object' &&
+                !Array.isArray(m.surfaces) &&
+                !!(m.surfaces as Record<string, CalibrationSurface>)[activePlacement]
+        ) || visibleMockups.find(
+            m => m.view === placementView
+        ) || visibleMockups[0];
+        
+        if (matchingMockup) {
+            setSelectedMockupId(matchingMockup.id);
         }
-        if (selectedProduct?.placements && Object.keys(selectedProduct.placements).length > 0) {
-            return selectedProduct.placements as Record<string, any>;
-        }
-        return getPlacementsForProduct(selectedProduct?.slug || '');
-    }, [calibratedSurfaces, selectedProduct]);
+    }, [activePlacement, visibleMockups, placements]);
 
     // Reset color/size/placement when product changes
     useEffect(() => {
@@ -170,7 +202,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
         if (product) {
             setSelectedProduct(product);
             updateUrl('product', slug);
-            setActiveStep('design');
+            setActiveStep(selectedDesign || isCustomUpload ? 'details' : 'design');
         }
     };
 
@@ -181,7 +213,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             setIsCustomUpload(false);
             setCustomPreviewUrl(null);
             updateUrl('design', id);
-            setActiveStep('details');
+            setActiveStep(selectedProduct ? 'details' : 'product');
             setShowDesignGallery(false);
         }
     };
@@ -194,7 +226,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             setCustomDesignName(file.name.replace(/\.[^/.]+$/, ''));
             setIsCustomUpload(true);
             setSelectedDesign(null);
-            setActiveStep('details');
+            setActiveStep(selectedProduct ? 'details' : 'product');
             setUploadError(null);
             setUploadedLogoUrl(null);
             
@@ -218,6 +250,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     const handleValidation = () => {
         if (!selectedProduct) return false;
         if (!selectedDesign && !isCustomUpload) return false;
+        if (!activeCalibratedSurface) return false;
         if (!selectedColor) return false;
         if (!selectedSize) return false;
         return true;
@@ -225,27 +258,23 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
 
     const estimatedTotal = useMemo(() => {
         if (!selectedProduct) return 0;
-        // Mock embroidery cost calculation (could be based on placement scale or design category)
-        const embroideryCost = isCustomUpload ? 25000 : 15000;
+        const embroideryCost = isCustomUpload ? 25000 : selectedDesign?.price_modifier || 0;
         return selectedProduct.base_price + embroideryCost;
-    }, [selectedProduct, isCustomUpload]);
+    }, [selectedProduct, selectedDesign, isCustomUpload]);
 
     const handleWhatsAppCheckout = () => {
-        if (!selectedProduct) return;
+        if (!selectedProduct || !activeCalibratedSurface) return;
 
         const designName = isCustomUpload
             ? `Diseño personalizado: ${customDesignName || 'Imagen adjunta'}${uploadedLogoUrl ? ` (Descarga: ${uploadedLogoUrl})` : ''}`
             : selectedDesign?.name || '';
             
-        const placementLabel = placements[activePlacement]?.label || 'Por defecto';
-        const threadLabel = THREAD_COLORS.find(t => t.id === selectedThread)?.name || 'Original';
-
+        const placementLabel = placements[activePlacement]?.label || activePlacement;
         const customMessage = `👕 PRENDA: ${selectedProduct.name}
 🎨 DISEÑO: ${designName}
 📍 ZONA: ${placementLabel}
 📏 TALLA: ${selectedSize}
 🎨 COLOR TELA: ${selectedColor}
-🧵 HILO: ${threadLabel}
 💰 TOTAL ESTIMADO: $${estimatedTotal.toLocaleString('es-CO')}
 
 Hola, quiero ordenar este bordado personalizado.`;
@@ -266,12 +295,11 @@ Hola, quiero ordenar este bordado personalizado.`;
     const activeCalibratedSurface = calibratedSurfaces?.[activePlacement] || null;
 
     const colorImages = selectedProduct?.color_images as Record<string, string> | undefined;
-    const currentBaseImage = selectedMockup?.image_url || (
-        (isBackView && selectedProduct?.back_image_url)
-            ? selectedProduct.back_image_url
-            : (colorImages?.[selectedColor] || selectedProduct?.image_url)
-    );
-    const currentTextureMap = selectedMockup?.shadow_map_url || selectedProduct?.texture_map_url;
+    const currentBaseImage = selectedMockup ? getMockupImageForColor(selectedMockup, selectedColor) : null;
+    const currentTextureMap = getMockupShadowForColor(selectedMockup, selectedColor) || selectedProduct?.texture_map_url;
+    const designImageForPreview = activeCalibratedSurface
+        ? (isCustomUpload ? customPreviewUrl : selectedDesign?.image_url)
+        : undefined;
 
     // Memoize options
     const productOptions = useMemo(() => products.map(p => ({
@@ -293,7 +321,7 @@ Hola, quiero ordenar este bordado personalizado.`;
         id: c,
         name: c,
         value: c,
-        colorHex: c
+        colorHex: COLOR_MAP[c] || c
     })) || [], [selectedProduct]);
 
     const sizeOptions = useMemo(() => selectedProduct?.sizes.map(s => ({
@@ -308,11 +336,9 @@ Hola, quiero ordenar este bordado personalizado.`;
         value: key
     })), [placements]);
 
-    const threadOptions = THREAD_COLORS.map(t => ({
-        id: t.id,
-        name: t.name,
-        value: t.id
-    }));
+    const activePlacementLabel = activeCalibratedSurface
+        ? (placements[activePlacement]?.label || activePlacement)
+        : 'Ubicación';
 
     const isComplete = handleValidation() && (!isCustomUpload || (!isUploadingLogo && !!uploadedLogoUrl));
 
@@ -356,7 +382,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                 <Visualizer
                     productImage={currentBaseImage}
                     textureMapImage={currentTextureMap}
-                    designImage={isCustomUpload ? customPreviewUrl : selectedDesign?.image_url}
+                    designImage={designImageForPreview}
                     productName={selectedProduct?.name}
                     designName={isCustomUpload ? customDesignName : selectedDesign?.name}
                     positionX={displayX}
@@ -366,8 +392,9 @@ Hola, quiero ordenar este bordado personalizado.`;
                     rotateX={activePlacementConfig?.rotateX ?? 0}
                     rotateY={activePlacementConfig?.rotateY ?? 0}
                     isAdminMode={false}
-                    threadFilter={THREAD_COLORS.find(t => t.id === selectedThread)?.css || 'none'}
+                    threadFilter="none"
                     calibratedSurface={activeCalibratedSurface}
+                    allowFallbackPlacement={false}
                 />
             </div>
 
@@ -645,45 +672,17 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     Personaliza Detalles
                                 </h3>
 
-                                {visibleMockups.length > 1 && (
-                                    <div className="mb-8">
-                                        <h3 className="font-heading font-bold text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
-                                            Mockup de vista
-                                            <span className="text-industrial-warning text-[10px] ml-auto font-normal normal-case opacity-50">Preview</span>
-                                        </h3>
-                                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                                            {visibleMockups.map(mockup => (
-                                                <button
-                                                    key={mockup.id}
-                                                    type="button"
-                                                    onClick={() => setSelectedMockupId(mockup.id)}
-                                                    className={`flex-shrink-0 w-24 border p-2 text-left transition-all ${
-                                                        selectedMockup?.id === mockup.id
-                                                            ? 'border-industrial-black bg-industrial-black text-white'
-                                                            : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
-                                                    }`}
-                                                >
-                                                    <div className="relative w-full aspect-[4/5] bg-gray-50 mb-2 overflow-hidden">
-                                                        <Image src={mockup.image_url} alt={mockup.name} fill className="object-contain" sizes="96px" />
-                                                    </div>
-                                                    <span className="block font-bold text-[9px] uppercase tracking-tight leading-tight">
-                                                        {mockup.name}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                {placementOptions.length > 0 && (
+                                    <OptionSelector
+                                        label="Ubicación del Bordado"
+                                        items={placementOptions}
+                                        selectedId={activePlacement}
+                                        onSelect={(id) => {
+                                            setActivePlacement(id);
+                                        }}
+                                        type="list"
+                                    />
                                 )}
-                                
-                                <OptionSelector
-                                    label="Ubicación del Bordado"
-                                    items={placementOptions}
-                                    selectedId={activePlacement}
-                                    onSelect={(id) => {
-                                        setActivePlacement(id);
-                                    }}
-                                    type="list"
-                                />
 
                                 <OptionSelector
                                     label="Color de la Prenda"
@@ -700,17 +699,9 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     onSelect={setSelectedSize}
                                     type="list"
                                 />
-                                
-                                <OptionSelector
-                                    label="Estilo de Hilo"
-                                    items={threadOptions}
-                                    selectedId={selectedThread}
-                                    onSelect={setSelectedThread}
-                                    type="list"
-                                />
                             </motion.div>
                         ) : (
-                            renderStepHeader('details', `Detalles: ${placements[activePlacement]?.label} / ${selectedColor}`, handleValidation(), '3')
+                            renderStepHeader('details', `Detalles: ${activePlacementLabel} / ${selectedColor}`, handleValidation(), '3')
                         )}
                     </div>
                 )}

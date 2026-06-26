@@ -31,6 +31,7 @@ interface VisualizerProps {
     threadFilter?: string;
     placementId?: string;
     calibratedSurface?: CalibrationSurface | null;
+    allowFallbackPlacement?: boolean;
 }
 
 export default function Visualizer({ 
@@ -50,10 +51,12 @@ export default function Visualizer({
     onAdminUpdate,
     threadFilter = 'none',
     placementId,
-    calibratedSurface = null
+    calibratedSurface = null,
+    allowFallbackPlacement = true
 }: VisualizerProps) {
     const [isZoomed, setIsZoomed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const textureMapOpacity = Math.max(0, Math.min(1, calibratedSurface?.shadowOpacity ?? 0.7));
 
     // If dragging in admin mode, calculate percentages
     const handleDragEnd = (event: any, info: any) => {
@@ -165,7 +168,7 @@ export default function Visualizer({
                                     blendMode={calibratedSurface.blendMode}
                                     filter={threadFilter === 'none' ? undefined : threadFilter}
                                 />
-                            ) : designImage && productImage ? (
+                            ) : designImage && productImage && allowFallbackPlacement ? (
                                 <motion.div
                                     key={isAdminMode ? `admin-${placementId || 'default'}` : designImage}
                                     initial={{ opacity: 0, scale: 0.8 }}
@@ -230,10 +233,10 @@ export default function Visualizer({
                             <motion.div
                                 key={`shadow-${textureMapImage}`}
                                 initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
+                                animate={{ opacity: textureMapOpacity }}
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.4 }}
-                                className="absolute inset-0 w-full h-full pointer-events-none mix-blend-multiply opacity-80 z-30"
+                                className="absolute inset-0 w-full h-full pointer-events-none mix-blend-multiply z-30"
                             >
                                 <Image
                                     src={textureMapImage}

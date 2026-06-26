@@ -1,115 +1,242 @@
 -- =============================================
--- SCHEMA DE BASE DE DATOS TEXERE
--- Ejecutar en Supabase SQL Editor
+-- TEXERE.ART CURRENT SCHEMA
+-- Bordados, prendas base, mockups, drops y productos armados.
 -- =============================================
 
--- Tabla de categorías
-CREATE TABLE IF NOT EXISTS categories (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(100) NOT NULL,
-  slug VARCHAR(100) UNIQUE NOT NULL,
-  parent_id UUID REFERENCES categories(id) ON DELETE SET NULL,
-  order_index INTEGER DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+create extension if not exists pgcrypto;
+
+create or replace function update_updated_at_column()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+create table if not exists audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamp with time zone default now(),
+  user_id uuid,
+  action text not null,
+  resource text not null,
+  details jsonb,
+  ip_address text
 );
 
--- Tabla de productos
-CREATE TABLE IF NOT EXISTS products (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  price DECIMAL(10, 2) NOT NULL,
-  image_url TEXT,
-  affiliate_link TEXT NOT NULL,
-  brand VARCHAR(50) NOT NULL CHECK (brand IN ('Natura', 'NovaVenta')),
-  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+create table if not exists config_global (
+  key text primary key,
+  value text not null,
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
 );
 
--- Índices para mejor rendimiento
-CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
-CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand);
-CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active);
-CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
-CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+insert into config_global (key, value)
+values ('delivery_time_message', '15 DÍAS HÁBILES')
+on conflict (key) do nothing;
 
--- Trigger para actualizar updated_at automáticamente
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ language 'plpgsql';
+create table if not exists base_products (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text unique not null,
+  product_type text default 'apparel',
+  base_price numeric(10, 2) not null,
+  image_url text not null,
+  colors text[] default '{}',
+  sizes text[] default '{}',
+  stock_status text default 'available',
+  description text,
+  back_image_url text,
+  texture_map_url text,
+  color_images jsonb default '{}'::jsonb,
+  placements jsonb default '{}'::jsonb,
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
 
-CREATE TRIGGER update_products_updated_at
-  BEFORE UPDATE ON products
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+create table if not exists embroidery_designs (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  price_modifier numeric(10, 2) not null default 0,
+  image_url text not null,
+  category text not null,
+  dimensions text,
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
 
--- =============================================
--- DATOS INICIALES
--- =============================================
+create table if not exists garment_mockups (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references base_products(id) on delete cascade,
+  name text not null,
+  slug text not null,
+  view text not null default 'front' check (view in ('front', 'back', 'side', 'detail')),
+  color_name text,
+  image_url text not null,
+  shadow_map_url text,
+  variants jsonb not null default '[]'::jsonb,
+  status text not null default 'needs_calibration'
+    check (status in ('draft', 'needs_calibration', 'calibrated', 'published')),
+  is_public boolean not null default false,
+  surfaces jsonb not null default '{}'::jsonb,
+  sort_order integer not null default 0,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  unique(product_id, slug)
+);
 
--- Insertar categorías de ejemplo
-INSERT INTO categories (name, slug, order_index) VALUES
-  ('Perfumes', 'perfumes', 1),
-  ('Cuidados diarios', 'cuidados-diarios', 2),
-  ('Cabello', 'cabello', 3),
-  ('Rostro', 'rostro', 4),
-  ('Maquillaje', 'maquillaje', 5),
-  ('Hogar', 'hogar', 6),
-  ('Cocina', 'cocina', 7)
-ON CONFLICT (slug) DO NOTHING;
+create table if not exists product_drops (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text unique not null,
+  description text,
+  image_url text,
+  status text not null default 'draft'
+    check (status in ('draft', 'published', 'hidden')),
+  sort_order integer not null default 0,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
 
--- Insertar subcategorías de Perfumes
-INSERT INTO categories (name, slug, parent_id, order_index)
-SELECT 'Masculino', 'perfumes-masculino', id, 1 FROM categories WHERE slug = 'perfumes'
-ON CONFLICT (slug) DO NOTHING;
+create table if not exists ready_products (
+  id uuid primary key default gen_random_uuid(),
+  drop_id uuid references product_drops(id) on delete set null,
+  base_product_id uuid references base_products(id) on delete set null,
+  design_id uuid references embroidery_designs(id) on delete set null,
+  name text not null,
+  slug text unique not null,
+  sku text,
+  short_description text,
+  description text,
+  status text not null default 'draft'
+    check (status in ('draft', 'published', 'hidden', 'sold_out')),
+  primary_color text,
+  available_colors text[] not null default '{}',
+  available_sizes text[] not null default '{}',
+  price numeric(10, 2) not null,
+  compare_at_price numeric(10, 2),
+  hero_image_url text not null,
+  gallery_image_urls text[] not null default '{}',
+  tags text[] not null default '{}',
+  is_featured boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
 
-INSERT INTO categories (name, slug, parent_id, order_index)
-SELECT 'Femenino', 'perfumes-femenino', id, 2 FROM categories WHERE slug = 'perfumes'
-ON CONFLICT (slug) DO NOTHING;
+create index if not exists idx_base_products_slug on base_products(slug);
+create index if not exists idx_embroidery_category on embroidery_designs(category);
+create index if not exists idx_garment_mockups_product on garment_mockups(product_id);
+create index if not exists idx_garment_mockups_public on garment_mockups(is_public, status);
+create index if not exists idx_garment_mockups_slug on garment_mockups(product_id, slug);
+create index if not exists idx_product_drops_slug on product_drops(slug);
+create index if not exists idx_product_drops_status_order on product_drops(status, sort_order);
+create index if not exists idx_ready_products_slug on ready_products(slug);
+create index if not exists idx_ready_products_drop on ready_products(drop_id);
+create index if not exists idx_ready_products_status_featured on ready_products(status, is_featured, sort_order);
 
-INSERT INTO categories (name, slug, parent_id, order_index)
-SELECT 'Niños', 'perfumes-ninos', id, 3 FROM categories WHERE slug = 'perfumes'
-ON CONFLICT (slug) DO NOTHING;
+alter table audit_logs enable row level security;
+alter table config_global enable row level security;
+alter table base_products enable row level security;
+alter table embroidery_designs enable row level security;
+alter table garment_mockups enable row level security;
+alter table product_drops enable row level security;
+alter table ready_products enable row level security;
 
--- =============================================
--- POLÍTICAS DE SEGURIDAD (RLS)
--- =============================================
+drop policy if exists "Public Read Config" on config_global;
+create policy "Public Read Config"
+  on config_global for select
+  using (true);
 
--- Habilitar RLS en las tablas
-ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+drop policy if exists "Admin All Access Config" on config_global;
+create policy "Admin All Access Config"
+  on config_global for all
+  using ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
+  with check ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
--- Política: Cualquiera puede leer categorías
-CREATE POLICY "Categorías públicas para lectura"
-  ON categories FOR SELECT
-  USING (true);
+drop policy if exists "Public Read Base Products" on base_products;
+create policy "Public Read Base Products"
+  on base_products for select
+  using (is_active = true);
 
--- Política: Solo usuarios autenticados pueden modificar categorías
-CREATE POLICY "Solo autenticados modifican categorías"
-  ON categories FOR ALL
-  USING (auth.role() = 'authenticated');
+drop policy if exists "Admin All Access Base Products" on base_products;
+create policy "Admin All Access Base Products"
+  on base_products for all
+  using ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
+  with check ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
--- Política: Cualquiera puede leer productos activos
-CREATE POLICY "Productos activos públicos"
-  ON products FOR SELECT
-  USING (is_active = true OR auth.role() = 'authenticated');
+drop policy if exists "Public Read Designs" on embroidery_designs;
+create policy "Public Read Designs"
+  on embroidery_designs for select
+  using (is_active = true);
 
--- Política: Solo usuarios autenticados pueden modificar productos
-CREATE POLICY "Solo autenticados modifican productos"
-  ON products FOR ALL
-  USING (auth.role() = 'authenticated');
+drop policy if exists "Admin All Access Designs" on embroidery_designs;
+create policy "Admin All Access Designs"
+  on embroidery_designs for all
+  using ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
+  with check ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
--- =============================================
--- STORAGE BUCKET PARA IMÁGENES
--- =============================================
--- Ejecutar en la sección de Storage o con la API:
--- 1. Crear bucket llamado "product-images"
--- 2. Hacer el bucket público para lectura
--- 3. Permitir uploads solo a usuarios autenticados
+drop policy if exists "Public read published garment mockups" on garment_mockups;
+create policy "Public read published garment mockups"
+  on garment_mockups for select
+  using (is_public = true and status = 'published');
 
+drop policy if exists "Admins manage garment mockups" on garment_mockups;
+create policy "Admins manage garment mockups"
+  on garment_mockups for all
+  using ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
+  with check ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+
+drop policy if exists "Public read visible product drops" on product_drops;
+create policy "Public read visible product drops"
+  on product_drops for select
+  using (status in ('published', 'hidden'));
+
+drop policy if exists "Admins manage product drops" on product_drops;
+create policy "Admins manage product drops"
+  on product_drops for all
+  using ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
+  with check ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+
+drop policy if exists "Public read published ready products" on ready_products;
+create policy "Public read published ready products"
+  on ready_products for select
+  using (status in ('published', 'hidden', 'sold_out'));
+
+drop policy if exists "Admins manage ready products" on ready_products;
+create policy "Admins manage ready products"
+  on ready_products for all
+  using ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
+  with check ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+
+drop trigger if exists update_config_updated_at on config_global;
+create trigger update_config_updated_at
+  before update on config_global
+  for each row
+  execute function update_updated_at_column();
+
+drop trigger if exists update_base_products_updated_at on base_products;
+create trigger update_base_products_updated_at
+  before update on base_products
+  for each row
+  execute function update_updated_at_column();
+
+drop trigger if exists update_garment_mockups_updated_at on garment_mockups;
+create trigger update_garment_mockups_updated_at
+  before update on garment_mockups
+  for each row
+  execute function update_updated_at_column();
+
+drop trigger if exists update_product_drops_updated_at on product_drops;
+create trigger update_product_drops_updated_at
+  before update on product_drops
+  for each row
+  execute function update_updated_at_column();
+
+drop trigger if exists update_ready_products_updated_at on ready_products;
+create trigger update_ready_products_updated_at
+  before update on ready_products
+  for each row
+  execute function update_updated_at_column();

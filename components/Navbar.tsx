@@ -36,8 +36,8 @@ export default function Navbar() {
     }, [isMobileMenuOpen]);
 
     const navLinks = [
-        { href: '/studio', label: 'Studio' },
-        { href: '/catalog', label: 'Catálogo' },
+        { href: '/shop', label: 'Comprar listo' },
+        { href: '/catalog', label: 'Personalizar' },
         { href: '/designs', label: 'Diseños' },
     ];
 

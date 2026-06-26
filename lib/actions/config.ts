@@ -2,22 +2,24 @@
 
 import { createClient, createPublicClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-
-const DELIVERY_TIME_KEY = 'delivery_time_message'
-const DEFAULT_MESSAGE = '15 DÍAS HÁBILES'
+import {
+    DEFAULT_DELIVERY_TIME_MESSAGE,
+    DELIVERY_TIME_KEY,
+    LEGACY_DELIVERY_TIME_KEY,
+    resolveDeliveryTime,
+} from '@/lib/config/delivery-time'
 
 export async function getDeliveryTime(): Promise<string> {
     const supabase = createPublicClient()
 
-    if (!supabase) return DEFAULT_MESSAGE
+    if (!supabase) return DEFAULT_DELIVERY_TIME_MESSAGE
 
     const { data } = await supabase
         .from('config_global')
-        .select('value')
-        .eq('key', DELIVERY_TIME_KEY)
-        .single()
+        .select('key, value')
+        .in('key', [DELIVERY_TIME_KEY, LEGACY_DELIVERY_TIME_KEY])
 
-    return data?.value || DEFAULT_MESSAGE
+    return resolveDeliveryTime(data)
 }
 
 export async function updateDeliveryTime(formData: FormData) {

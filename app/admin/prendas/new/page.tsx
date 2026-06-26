@@ -1,6 +1,7 @@
 'use server'
 
 import { createProduct } from '@/lib/actions/products'
+import { COLOR_DATABASE } from '@/lib/colors'
 
 export default async function NewProductPage() {
     return (
@@ -55,24 +56,7 @@ export default async function NewProductPage() {
                         />
                     </div>
 
-                    {/* Tipo de prenda */}
-                    <div>
-                        <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-                            Tipo de Prenda
-                        </label>
-                        <select
-                            name="product_type"
-                            className="w-full bg-industrial-light border border-industrial-gray/30 p-3 text-sm font-mono focus:border-industrial-warning outline-none"
-                            defaultValue="camiseta"
-                        >
-                            <option value="camiseta">Camiseta</option>
-                            <option value="hoodie">Hoodie</option>
-                            <option value="gorra">Gorra</option>
-                            <option value="blusa">Blusa</option>
-                            <option value="tote">Tote / Bolso</option>
-                            <option value="otro">Otro</option>
-                        </select>
-                    </div>
+                    <input type="hidden" name="product_type" value="apparel" />
 
                     {/* Imagen */}
                     <div>
@@ -89,39 +73,57 @@ export default async function NewProductPage() {
                         <p className="text-[10px] text-gray-500 mt-2">Formatos: JPG, PNG, WEBP. Max 5MB.</p>
                     </div>
 
-                    {/* Colores (Multi-select simplificado) */}
-                    <div>
-                        <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-                            Colores Disponibles
-                        </label>
-                        <div className="flex gap-4">
-                            <label className="flex items-center gap-2">
-                                <input type="checkbox" name="colors" value="Negro" defaultChecked />
-                                <span className="text-sm font-mono">Negro</span>
+                    {/* Colores y Tallas */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
+                                Colores disponibles
                             </label>
-                            <label className="flex items-center gap-2">
-                                <input type="checkbox" name="colors" value="Blanco" />
-                                <span className="text-sm font-mono">Blanco</span>
-                            </label>
-                            <label className="flex items-center gap-2">
-                                <input type="checkbox" name="colors" value="Gris" />
-                                <span className="text-sm font-mono">Gris</span>
-                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-industrial-light border border-industrial-gray/20 p-3 max-h-48 overflow-y-auto">
+                                {COLOR_DATABASE.map((color) => {
+                                    const isChecked = ['Negro', 'Blanco', 'Gris'].includes(color.name);
+                                    return (
+                                        <label key={color.name} className="flex items-center gap-2 cursor-pointer select-none hover:bg-gray-150/40 p-1 rounded transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                name="colors"
+                                                value={color.name}
+                                                defaultChecked={isChecked}
+                                                className="w-3.5 h-3.5 rounded text-industrial-warning focus:ring-industrial-warning accent-industrial-black"
+                                            />
+                                            <span 
+                                                className="w-3.5 h-3.5 rounded-full border border-gray-300 inline-block flex-shrink-0"
+                                                style={{ backgroundColor: color.hex }}
+                                            />
+                                            <span className="text-[10px] font-mono uppercase tracking-tight text-industrial-black">{color.name}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-[9px] text-gray-500 mt-1">Selecciona los colores que estarán activos en la tienda.</p>
                         </div>
-                    </div>
-
-                    {/* Tallas (Multi-select simplificado) */}
-                    <div>
-                        <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
-                            Tallas Disponibles
-                        </label>
-                        <div className="flex gap-4 flex-wrap">
-                            {['S', 'M', 'L', 'XL', 'XXL'].map((size) => (
-                                <label key={size} className="flex items-center gap-2">
-                                    <input type="checkbox" name="sizes" value={size} defaultChecked={['M', 'L'].includes(size)} />
-                                    <span className="text-sm font-mono">{size}</span>
-                                </label>
-                            ))}
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-widest text-industrial-gray mb-2">
+                                Tallas disponibles
+                            </label>
+                            <div className="grid grid-cols-2 gap-2 bg-industrial-light border border-industrial-gray/20 p-3">
+                                {['S', 'M', 'L', 'XL', 'XXL'].map((size) => {
+                                    const isChecked = ['M', 'L'].includes(size);
+                                    return (
+                                        <label key={size} className="flex items-center gap-2 cursor-pointer select-none hover:bg-gray-150/40 p-1 rounded transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                name="sizes"
+                                                value={size}
+                                                defaultChecked={isChecked}
+                                                className="w-3.5 h-3.5 rounded text-industrial-warning focus:ring-industrial-warning accent-industrial-black"
+                                            />
+                                            <span className="text-[10px] font-mono uppercase tracking-tight text-industrial-black">{size}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-[9px] text-gray-500 mt-1">Selecciona las tallas activas para esta prenda.</p>
                         </div>
                     </div>
 
@@ -156,6 +158,22 @@ export default async function NewProductPage() {
                     </div>
                 </form>
             </div>
+            <script dangerouslySetInnerHTML={{ __html: `
+                document.querySelector('form').addEventListener('submit', function(e) {
+                    const colors = document.querySelectorAll('input[name="colors"]:checked');
+                    const sizes = document.querySelectorAll('input[name="sizes"]:checked');
+                    if (colors.length === 0) {
+                        alert('Debes seleccionar al menos un color para el producto.');
+                        e.preventDefault();
+                        return false;
+                    }
+                    if (sizes.length === 0) {
+                        alert('Debes seleccionar al menos una talla para el producto.');
+                        e.preventDefault();
+                        return false;
+                    }
+                });
+            ` }} />
         </div>
     )
 }

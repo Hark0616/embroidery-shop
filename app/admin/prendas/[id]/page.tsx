@@ -2,9 +2,11 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BaseProduct, GarmentMockup } from '@/lib/types/database';
-import { updateProductPublication, deleteProductAction } from '@/lib/actions/products';
+import { updateProductPublication, deleteProductAction, updateProductDetails, updateProductImage } from '@/lib/actions/products';
 import { deleteMockupAction } from '@/lib/actions/mockups';
 import DeleteButton from '@/components/admin/DeleteButton';
+import { COLOR_DATABASE } from '@/lib/colors';
+import { getMockupImageForColor, getMockupVariants } from '@/lib/mockup-variants';
 
 function getSurfaceCount(mockup: GarmentMockup) {
     if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
@@ -64,15 +66,6 @@ function getProductReadiness(product: BaseProduct, mockups: GarmentMockup[]) {
     };
 }
 
-const PRODUCT_TYPE_LABELS: Record<string, string> = {
-    camiseta: 'Camiseta',
-    hoodie: 'Hoodie',
-    gorra: 'Gorra',
-    blusa: 'Blusa',
-    tote: 'Tote / Bolso',
-    apparel: 'Ropa / General',
-    otro: 'Otro',
-};
 
 export default async function EditPrendaPage({ params }: { params: { id: string } }) {
     const supabase = await createClient();
@@ -104,7 +97,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
     const calibratedCount = productMockups.filter(mockup => getSurfaceCount(mockup) > 0).length;
     const publishedCount = productMockups.filter(mockup => mockup.is_public && mockup.status === 'published').length;
     const firstMockup = productMockups.find(m => m.is_public && m.status === 'published') || productMockups[0];
-    const displayImage = firstMockup?.image_url || product.image_url;
+    const displayImage = firstMockup ? getMockupImageForColor(firstMockup) : product.image_url;
 
     return (
         <div className="p-8 bg-industrial-light min-h-screen">
@@ -138,7 +131,7 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                             {product.name}
                         </h1>
                         <p className="font-mono text-xs text-industrial-gray mt-2 uppercase tracking-widest">
-                            {product.slug} / {PRODUCT_TYPE_LABELS[product.product_type || ''] || product.product_type || 'sin tipo'}
+                            {product.slug}
                         </p>
                     </div>
                     <div className={`border px-4 py-3 ${readiness.className}`}>
@@ -170,15 +163,48 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
             <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
                 <aside className="space-y-6">
                     <section className="bg-white border border-industrial-gray/20 p-5">
-                        <div className="aspect-[4/5] bg-gray-100 border border-industrial-gray/10 overflow-hidden mb-5">
+                        <div className="aspect-[4/5] max-w-[240px] mx-auto bg-gray-100 border border-industrial-gray/10 overflow-hidden mb-4">
                             {displayImage ? (
-                                <img src={displayImage} alt={product.name} className="w-full h-full object-cover" />
+                                <img src={displayImage} alt={product.name} className="w-full h-full object-contain" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300 font-mono text-xs">
                                     SIN IMAGEN
                                 </div>
                             )}
                         </div>
+
+                        {product.image_url && displayImage !== product.image_url && (
+                            <div className="mb-4 bg-gray-50 p-2 border border-gray-100 flex items-center gap-3 rounded-lg">
+                                <div className="w-12 h-16 relative bg-white border border-gray-250 overflow-hidden flex-shrink-0">
+                                    <img src={product.image_url} alt="Base" className="w-full h-full object-contain" />
+                                </div>
+                                <div>
+                                    <p className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">Imagen base actual</p>
+                                    <p className="text-[10px] text-gray-500 leading-tight">Esta es la foto de la prenda sin diseño.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <form action={updateProductImage} className="mb-6 border-b border-industrial-gray/10 pb-6 space-y-2">
+                            <input type="hidden" name="product_id" value={product.id} />
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray">
+                                Cambiar Imagen Base
+                            </label>
+                            <input
+                                type="file"
+                                name="image"
+                                accept="image/*"
+                                required
+                                className="w-full bg-industrial-light border border-industrial-gray/20 p-1.5 text-[10px] font-mono outline-none cursor-pointer"
+                            />
+                            <button
+                                type="submit"
+                                className="w-full bg-industrial-black text-white hover:bg-industrial-warning hover:text-industrial-black py-2 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-sm"
+                            >
+                                Actualizar Imagen
+                            </button>
+                        </form>
+
                         <div className="space-y-4">
                             <div>
                                 <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">Precio base</p>
@@ -221,6 +247,136 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                 </aside>
 
                 <main className="space-y-6">
+                    <section className="bg-white border border-industrial-gray/20 p-6">
+                        <h2 className="font-heading font-black text-xl uppercase tracking-tighter text-industrial-black mb-4">
+                            Editar Detalles de la Prenda
+                        </h2>
+                        <form action={updateProductDetails} className="space-y-4">
+                            <input type="hidden" name="product_id" value={product.id} />
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Nombre del Producto
+                                    </label>
+                                    <input
+                                        name="name"
+                                        type="text"
+                                        required
+                                        defaultValue={product.name}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Slug (URL)
+                                    </label>
+                                    <input
+                                        name="slug"
+                                        type="text"
+                                        required
+                                        defaultValue={product.slug}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input type="hidden" name="product_type" value={product.product_type || 'apparel'} />
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Precio Base ($)
+                                    </label>
+                                    <input
+                                        name="base_price"
+                                        type="number"
+                                        required
+                                        min="0"
+                                        step="0.01"
+                                        defaultValue={product.base_price}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-1">
+                                        Estado de Stock
+                                    </label>
+                                    <select
+                                        name="stock_status"
+                                        defaultValue={product.stock_status || 'available'}
+                                        className="w-full bg-industrial-light border border-industrial-gray/30 p-2.5 text-sm font-mono outline-none focus:border-industrial-warning"
+                                    >
+                                        <option value="available">Disponible</option>
+                                        <option value="out_of_stock">Agotado</option>
+                                        <option value="pre_order">Pre-orden</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-2">
+                                        Colores disponibles
+                                    </label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-industrial-light border border-industrial-gray/20 p-3 max-h-48 overflow-y-auto">
+                                        {COLOR_DATABASE.map((color) => {
+                                            const isChecked = product.colors?.includes(color.name);
+                                            return (
+                                                <label key={color.name} className="flex items-center gap-2 cursor-pointer select-none hover:bg-gray-150/40 p-1 rounded transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="colors"
+                                                        value={color.name}
+                                                        defaultChecked={isChecked}
+                                                        className="w-3.5 h-3.5 rounded text-industrial-warning focus:ring-industrial-warning accent-industrial-black"
+                                                    />
+                                                    <span 
+                                                        className="w-3.5 h-3.5 rounded-full border border-gray-300 inline-block flex-shrink-0"
+                                                        style={{ backgroundColor: color.hex }}
+                                                    />
+                                                    <span className="text-[10px] font-mono uppercase tracking-tight text-industrial-black">{color.name}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[9px] text-gray-500 mt-1">Selecciona los colores que estarán activos en la tienda.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-industrial-gray mb-2">
+                                        Tallas disponibles
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2 bg-industrial-light border border-industrial-gray/20 p-3">
+                                        {['S', 'M', 'L', 'XL', 'XXL'].map((size) => {
+                                            const isChecked = product.sizes?.includes(size);
+                                            return (
+                                                <label key={size} className="flex items-center gap-2 cursor-pointer select-none hover:bg-gray-150/40 p-1 rounded transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="sizes"
+                                                        value={size}
+                                                        defaultChecked={isChecked}
+                                                        className="w-3.5 h-3.5 rounded text-industrial-warning focus:ring-industrial-warning accent-industrial-black"
+                                                    />
+                                                    <span className="text-[10px] font-mono uppercase tracking-tight text-industrial-black">{size}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[9px] text-gray-500 mt-1">Selecciona las tallas activas para esta prenda.</p>
+                                </div>
+                            </div>
+
+                            <div className="pt-2">
+                                <button
+                                    type="submit"
+                                    className="px-5 py-3 bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                                >
+                                    Guardar Detalles
+                                </button>
+                            </div>
+                        </form>
+                    </section>
+
                     <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="bg-white border border-industrial-gray/20 p-5">
                             <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">Mockups</p>
@@ -274,18 +430,20 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                 {productMockups.map((mockup) => {
                                     const status = getMockupStatus(mockup);
                                     const surfaceCount = getSurfaceCount(mockup);
+                                    const variants = getMockupVariants(mockup);
+                                    const previewImage = getMockupImageForColor(mockup);
 
                                     return (
                                         <article key={mockup.id} className="border border-industrial-gray/20 bg-white overflow-hidden">
                                             <div className="aspect-[4/5] bg-gray-100 border-b border-industrial-gray/10">
-                                                <img src={mockup.image_url} alt={mockup.name} className="w-full h-full object-contain" />
+                                                <img src={previewImage} alt={mockup.name} className="w-full h-full object-contain" />
                                             </div>
                                             <div className="p-4">
                                                 <div className="flex items-start justify-between gap-3 mb-3">
                                                     <div>
                                                         <h3 className="font-bold text-sm uppercase tracking-tight">{mockup.name}</h3>
                                                         <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest mt-1">
-                                                            {mockup.view}{mockup.color_name ? ` / ${mockup.color_name}` : ''}
+                                                            {mockup.view} / {variants.length} color{variants.length === 1 ? '' : 'es'}
                                                         </p>
                                                     </div>
                                                     <span className={`inline-block px-2 py-1 text-[9px] uppercase tracking-widest font-bold border whitespace-nowrap ${status.className}`}>
@@ -295,6 +453,18 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                                                 <p className="font-mono text-[10px] text-industrial-gray uppercase tracking-widest mb-4">
                                                     {surfaceCount} zona{surfaceCount === 1 ? '' : 's'} calibrada{surfaceCount === 1 ? '' : 's'}
                                                 </p>
+                                                {variants.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5 mb-4">
+                                                        {variants.map(variant => (
+                                                            <span
+                                                                key={variant.id}
+                                                                className="border border-industrial-gray/10 px-2 py-1 text-[9px] font-mono uppercase tracking-widest"
+                                                            >
+                                                                {variant.colorName || 'Base'}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center justify-between gap-3">
                                                     <Link href={`/admin/mockups/${mockup.id}`} className="text-industrial-black font-bold uppercase tracking-widest text-xs hover:underline">
                                                         Calibrar
@@ -321,6 +491,25 @@ export default async function EditPrendaPage({ params }: { params: { id: string 
                     </section>
                 </main>
             </div>
+            <script dangerouslySetInnerHTML={{ __html: `
+                const detailsForm = document.querySelector('input[name="colors"]')?.closest('form');
+                if (detailsForm) {
+                    detailsForm.addEventListener('submit', function(e) {
+                        const colors = detailsForm.querySelectorAll('input[name="colors"]:checked');
+                        const sizes = detailsForm.querySelectorAll('input[name="sizes"]:checked');
+                        if (colors.length === 0) {
+                            alert('Debes seleccionar al menos un color.');
+                            e.preventDefault();
+                            return false;
+                        }
+                        if (sizes.length === 0) {
+                            alert('Debes seleccionar al menos una talla.');
+                            e.preventDefault();
+                            return false;
+                        }
+                    });
+                }
+            ` }} />
         </div>
     );
 }

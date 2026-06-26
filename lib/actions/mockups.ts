@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
 import { uploadImage } from './storage'
-import type { CalibrationSurface } from '@/lib/types/database'
+import type { CalibrationSurface, MockupVariant } from '@/lib/types/database'
 
 type MockupStatus = 'draft' | 'needs_calibration' | 'calibrated' | 'published'
 
@@ -16,6 +16,37 @@ function slugify(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+async function getUniqueMockupSlug(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  productId: string,
+  value: string,
+) {
+  const baseSlug = slugify(value) || `mockup-${Date.now()}`
+  let candidate = baseSlug
+  let suffix = 2
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('garment_mockups')
+      .select('id')
+      .eq('product_id', productId)
+      .eq('slug', candidate)
+      .limit(1)
+
+    if (error) {
+      console.error('Error checking mockup slug:', error)
+      throw new Error('Failed to validate mockup slug')
+    }
+
+    if (!data || data.length === 0) {
+      return candidate
+    }
+
+    candidate = `${baseSlug}-${suffix}`
+    suffix += 1
+  }
 }
 
 export async function createMockup(formData: FormData) {
@@ -34,18 +65,10 @@ export async function createMockup(formData: FormData) {
   const file = formData.get('image') as File
   const shadowFile = formData.get('shadow_map') as File | null
   const redirectTo = formData.get('redirect_to') as string | null
+  const variantCount = Number(formData.get('variant_count') || 0)
 
   if (!productId || !name) {
     throw new Error('Product and name are required')
-  }
-
-  if (!file || file.size === 0) {
-    throw new Error('Mockup image is required')
-  }
-
-  const imageUrl = await uploadImage(file, 'products', 'mockups')
-  if (!imageUrl) {
-    throw new Error('Failed to upload mockup image')
   }
 
   let shadowMapUrl: string | null = null
@@ -53,16 +76,64 @@ export async function createMockup(formData: FormData) {
     shadowMapUrl = await uploadImage(shadowFile, 'products', 'mockup-shadows')
   }
 
-  const slug = slugify(rawSlug || name)
+  const variants: MockupVariant[] = []
+
+  if (variantCount > 0) {
+    for (let index = 0; index < variantCount; index += 1) {
+      const variantColor = formData.get(`variant_color_${index}`) as string
+      const variantFile = formData.get(`variant_image_${index}`) as File
+
+      if (!variantFile || variantFile.size === 0) {
+        continue
+      }
+
+      const variantImageUrl = await uploadImage(variantFile, 'products', 'mockups')
+      if (!variantImageUrl) {
+        throw new Error(`Failed to upload mockup image for ${variantColor || `variant ${index + 1}`}`)
+      }
+
+      variants.push({
+        id: slugify(variantColor || `variante-${index + 1}`),
+        colorName: variantColor || null,
+        imageUrl: variantImageUrl,
+        shadowMapUrl,
+        isPrimary: variants.length === 0,
+      })
+    }
+  }
+
+  if (variants.length === 0) {
+    if (!file || file.size === 0) {
+      throw new Error('Mockup image is required')
+    }
+
+    const imageUrl = await uploadImage(file, 'products', 'mockups')
+    if (!imageUrl) {
+      throw new Error('Failed to upload mockup image')
+    }
+
+    variants.push({
+      id: slugify(colorName || 'default'),
+      colorName,
+      imageUrl,
+      shadowMapUrl,
+      isPrimary: true,
+    })
+  }
+
+  const primaryVariant = variants[0]
+
+  const slug = await getUniqueMockupSlug(supabase, productId, rawSlug || name)
 
   const { data: mockup, error } = await supabase.from('garment_mockups').insert({
     product_id: productId,
     name,
     slug,
     view,
-    color_name: colorName,
-    image_url: imageUrl,
+    color_name: primaryVariant.colorName,
+    image_url: primaryVariant.imageUrl,
     shadow_map_url: shadowMapUrl,
+    variants,
     status: 'needs_calibration',
     is_public: false,
     surfaces: {},

@@ -1,33 +1,30 @@
-# TEXERE SHOP
+# TEXERE.ART
 
-Landing page para sitio de afiliados especializado en productos naturales de Natura y NovaVenta.
+Tienda de prendas bordadas con dos flujos publicos:
 
-## Características
+- `Comprar listo`: productos armados con foto final, talla, color y compra por WhatsApp.
+- `Personalizar`: prendas base + catalogo de disenos + mockups calibrados en Studio.
 
-- Diseño moderno con paleta de colores mint (#C0EBAE, #AEEBC8, #AEEBB4, #E3EDCA, #AEEBDD, #ABEBB2)
-- Fondo claro con botones oscuros para mejor contraste
-- Componentes reutilizables (Navbar, Hero, ProductCard, ProductGrid)
-- Sistema de afiliados con enlaces externos a productos de Natura y NovaVenta
-- Cada producto incluye código de afiliado en el enlace
+## Modelo
 
-## Instalación
-
-```bash
-npm install
-```
+- `ready_products`: ofertas finales para vender rapido.
+- `product_drops`: drops o categorias comerciales para agrupar productos armados.
+- `base_products`: prendas base disponibles para personalizacion.
+- `embroidery_designs`: catalogo de bordados.
+- `garment_mockups`: fotos y superficies calibradas para previsualizar bordados.
+- `config_global`: settings visibles en tienda, como tiempo de produccion.
 
 ## Desarrollo
 
 ```bash
+npm install
 npm run dev
 ```
 
-Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+Abre [http://localhost:3000](http://localhost:3000).
 
-## Estructura
+## Verificacion
 
-- `/app` - Páginas y layout de Next.js
-- `/components` - Componentes React reutilizables
-- `/lib` - Utilidades y datos placeholder
-- `tailwind.config.ts` - Configuración de Tailwind con colores personalizados
-
+```bash
+npm run build
+```

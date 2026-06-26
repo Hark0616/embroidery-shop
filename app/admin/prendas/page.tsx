@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import type { BaseProduct } from '@/lib/types/database'
+import { getMockupImageForColor } from '@/lib/mockup-variants'
 
 type MockupSummary = {
   id: string
@@ -8,21 +9,16 @@ type MockupSummary = {
   is_public: boolean
   surfaces: unknown
   image_url?: string
+  color_name?: string | null
+  shadow_map_url?: string | null
+  variants?: unknown
 }
 
 type ProductWithMockups = BaseProduct & {
   garment_mockups?: MockupSummary[]
 }
 
-const PRODUCT_TYPE_LABELS: Record<string, string> = {
-  camiseta: 'Camiseta',
-  hoodie: 'Hoodie',
-  gorra: 'Gorra',
-  blusa: 'Blusa',
-  tote: 'Tote / Bolso',
-  apparel: 'Ropa / General',
-  otro: 'Otro',
-}
+
 
 function getSurfaceCount(mockup: MockupSummary) {
   if (!mockup.surfaces || typeof mockup.surfaces !== 'object' || Array.isArray(mockup.surfaces)) {
@@ -93,10 +89,35 @@ function getWorkflowState(product: ProductWithMockups) {
 
 export default async function PrendasPage() {
   const supabase = await createClient()
-  const { data: products } = await supabase
-    ?.from('base_products')
-    .select('*, garment_mockups(id, status, is_public, surfaces, image_url)')
-    .order('created_at', { ascending: false }) || { data: [] }
+  let products: ProductWithMockups[] = []
+  let loadError = ''
+  let migrationWarning = ''
+
+  if (supabase) {
+    const result = await supabase
+      .from('base_products')
+      .select('*, garment_mockups(id, status, is_public, surfaces, image_url, color_name, shadow_map_url, variants)')
+      .order('created_at', { ascending: false })
+
+    if (result.error) {
+      console.error('Error loading garments with mockup variants:', result.error)
+
+      const fallback = await supabase
+        .from('base_products')
+        .select('*, garment_mockups(id, status, is_public, surfaces, image_url, color_name, shadow_map_url)')
+        .order('created_at', { ascending: false })
+
+      if (fallback.error) {
+        console.error('Error loading garments fallback:', fallback.error)
+        loadError = fallback.error.message
+      } else {
+        products = (fallback.data || []) as ProductWithMockups[]
+        migrationWarning = 'Falta aplicar la migracion de variantes de mockup. Las prendas existen, pero algunos datos nuevos se cargaron en modo compatibilidad.'
+      }
+    } else {
+      products = (result.data || []) as ProductWithMockups[]
+    }
+  }
 
   return (
     <div className="p-8 bg-industrial-light min-h-screen">
@@ -121,15 +142,37 @@ export default async function PrendasPage() {
         </div>
       </div>
 
+      {migrationWarning && (
+        <div className="bg-industrial-warning/10 border border-industrial-warning p-5 mb-6">
+          <h2 className="font-heading font-black text-lg uppercase tracking-tighter text-industrial-black mb-1">
+            Prendas cargadas en modo compatibilidad
+          </h2>
+          <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest leading-relaxed">
+            {migrationWarning} Ejecuta <span className="font-bold">supabase/migrations/20260626_add_mockup_variants.sql</span>.
+          </p>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="bg-white border border-red-200 p-8 mb-6">
+          <h2 className="font-heading font-black text-xl uppercase tracking-tighter text-red-700 mb-2">
+            No se pudieron cargar las prendas
+          </h2>
+          <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest leading-relaxed">
+            {loadError}
+          </p>
+        </div>
+      )}
+
       {/* Tabla de Prendas */}
-      <div className="bg-white border border-industrial-gray/20 shadow-sm overflow-hidden">
+      {!loadError && <div className="bg-white border border-industrial-gray/20 shadow-sm overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-industrial-black text-industrial-white font-mono text-xs uppercase tracking-wider">
             <tr>
               <th className="px-6 py-4 font-normal">Imagen</th>
               <th className="px-6 py-4 font-normal">Producto</th>
               <th className="px-6 py-4 font-normal">Precio Base</th>
-              <th className="px-6 py-4 font-normal">Tipo</th>
+
               <th className="px-6 py-4 font-normal">Variantes</th>
               <th className="px-6 py-4 font-normal">Mockups</th>
               <th className="px-6 py-4 font-normal text-center">Publicación</th>
@@ -140,7 +183,7 @@ export default async function PrendasPage() {
             {products?.map((product: ProductWithMockups) => {
               const workflow = getWorkflowState(product)
               const firstMockup = product.garment_mockups?.find(m => m.is_public && m.status === 'published') || product.garment_mockups?.[0]
-              const displayImage = firstMockup?.image_url || product.image_url
+              const displayImage = firstMockup ? getMockupImageForColor(firstMockup as any) : product.image_url
 
               return (
                 <tr key={product.id} className="hover:bg-industrial-light/50 transition-colors">
@@ -164,11 +207,7 @@ export default async function PrendasPage() {
                   <td className="px-6 py-4 font-mono text-sm text-industrial-black">
                     ${product.base_price?.toLocaleString()}
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-block px-2 py-1 bg-gray-100 text-xs font-mono uppercase tracking-wide text-gray-600">
-                      {PRODUCT_TYPE_LABELS[product.product_type || ''] || product.product_type || 'sin tipo'}
-                    </span>
-                  </td>
+
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
                       {product.colors?.map((c: string) => (
@@ -214,7 +253,7 @@ export default async function PrendasPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </div>}
     </div>
   )
 }
