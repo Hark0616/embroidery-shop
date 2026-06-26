@@ -1,3 +1,6 @@
+import type { CalibrationSurface } from '@/lib/types/database'
+import { validateSurfaceMap } from '@/lib/deformation/surface-validation'
+
 export type MockupLike = {
   status?: string | null
   is_public?: boolean | null
@@ -20,7 +23,8 @@ export function hasCalibratedSurface(surfaces: unknown) {
     return false
   }
 
-  return Object.keys(surfaces).length > 0
+  const surfaceMap = surfaces as Record<string, CalibrationSurface>
+  return Object.keys(surfaceMap).length > 0 && validateSurfaceMap(surfaceMap).ok
 }
 
 export function isPublishedCalibratedMockup(mockup: MockupLike) {

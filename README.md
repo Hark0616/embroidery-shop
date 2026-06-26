@@ -28,3 +28,15 @@ Abre [http://localhost:3000](http://localhost:3000).
 ```bash
 npm run build
 ```
+
+## Calibracion asistida
+
+El admin puede pedir propuestas de deformacion para una zona de mockup marcada con 4 esquinas. La web usa RunPod Serverless como worker GPU y requiere estas variables en Vercel:
+
+```bash
+RUNPOD_DEFORMATION_ENDPOINT_ID=
+RUNPOD_API_KEY=
+DEFORMATION_WORKER_VERSION=runpod-depth-normal-v1
+```
+
+El worker esta en `workers/deformation` y devuelve propuestas compatibles con `garment_mockups.surfaces`.

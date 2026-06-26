@@ -6,6 +6,7 @@ import { updateMockupCalibration } from '@/lib/actions/mockups'
 import type { CalibrationPoint, CalibrationSurface, EmbroideryDesign, GarmentMockup } from '@/lib/types/database'
 import MeshWarpOverlay from '@/components/studio/MeshWarpOverlay'
 import {
+  createUniformGrid,
   createMeshSurface,
   getCornerIndices,
   getPointRole,
@@ -14,9 +15,12 @@ import {
   reinterpolateFromCorners,
 } from '@/lib/mesh-utils'
 import { getMockupVariants } from '@/lib/mockup-variants'
+import { validateSurface } from '@/lib/deformation/surface-validation'
+import type { DeformationProposal } from '@/lib/deformation/types'
 
 type SurfaceMap = Record<string, CalibrationSurface>
 type EditMode = 'corners' | 'grid' | 'preview'
+type AssistStatus = 'idle' | 'preparing' | 'queued' | 'analyzing' | 'ready' | 'error'
 
 const DEFAULT_GRID_SIZE = 5
 
@@ -31,6 +35,15 @@ const BLEND_OPTIONS: Array<{ value: CalibrationSurface['blendMode']; label: stri
   { value: 'overlay', label: 'Overlay' },
   { value: 'normal', label: 'Normal' },
 ]
+
+const ASSIST_STATUS_LABELS: Record<AssistStatus, string> = {
+  idle: 'Sin iniciar',
+  preparing: 'Preparando',
+  queued: 'En cola',
+  analyzing: 'Analizando',
+  ready: 'Listo',
+  error: 'Error',
+}
 
 const SIZE_LABELS: Record<string, string> = {
   small: 'Pequeño',
@@ -80,6 +93,10 @@ function normalizeId(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 // ─── Undo/Redo ─────────────────────────────────────────────────
@@ -162,6 +179,11 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(true)
   const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 })
+  const [assistStatus, setAssistStatus] = useState<AssistStatus>('idle')
+  const [assistMessage, setAssistMessage] = useState('')
+  const [assistJobId, setAssistJobId] = useState('')
+  const [assistProposals, setAssistProposals] = useState<DeformationProposal[]>([])
+  const [importJson, setImportJson] = useState('')
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
 
@@ -405,7 +427,6 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     const bl = normalizedActive.meshPoints[corners[2]]
     const br = normalizedActive.meshPoints[corners[3]]
 
-    const { createUniformGrid } = require('@/lib/mesh-utils')
     const newMeshPoints = createUniformGrid(tl, tr, bl, br, newSize)
 
     updateState({
@@ -446,6 +467,158 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
   const handlePointerUp = () => {
     setDragPointIndex(null)
+  }
+
+  // ─── Assisted deformation ─────────────────────────────────────
+
+  const requestDeformationAssistance = async () => {
+    if (!normalizedActive) return
+
+    setAssistStatus('preparing')
+    setAssistMessage('Preparando imagen y esquinas de la zona...')
+    setAssistProposals([])
+    setAssistJobId('')
+
+    try {
+      const startResponse = await fetch(`/api/admin/mockups/${mockup.id}/deformation-jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          surface: normalizedActive,
+          variantId: previewVariant?.id || null,
+        }),
+      })
+      const startPayload = await startResponse.json()
+
+      if (!startResponse.ok) {
+        throw new Error(startPayload.error || 'No se pudo iniciar la asistencia.')
+      }
+
+      const jobId = startPayload.jobId as string
+      setAssistJobId(jobId)
+      setAssistStatus('queued')
+      setAssistMessage('Job enviado a GPU. Esperando turno...')
+
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        await sleep(2000)
+        const statusResponse = await fetch(`/api/admin/mockups/${mockup.id}/deformation-jobs/${jobId}`, {
+          cache: 'no-store',
+        })
+        const statusPayload = await statusResponse.json()
+
+        if (!statusResponse.ok) {
+          throw new Error(statusPayload.error || 'No se pudo leer el estado del worker.')
+        }
+
+        if (statusPayload.status === 'FAILED' || statusPayload.status === 'CANCELLED' || statusPayload.status === 'TIMED_OUT') {
+          throw new Error(statusPayload.error || `El worker terminó con estado ${statusPayload.status}.`)
+        }
+
+        if (statusPayload.status === 'COMPLETED') {
+          const proposals = statusPayload.output?.proposals || []
+          if (!Array.isArray(proposals) || proposals.length === 0) {
+            throw new Error('El worker no devolvió propuestas de malla.')
+          }
+          setAssistProposals(proposals)
+          setAssistStatus('ready')
+          setAssistMessage('Listo. Revisa las propuestas y aplica la que mejor siga la prenda.')
+          return
+        }
+
+        setAssistStatus('analyzing')
+        setAssistMessage(statusPayload.status === 'IN_QUEUE'
+          ? 'GPU en cola. Mantén esta pantalla abierta.'
+          : 'Analizando textura, relieve y curvatura de la zona...')
+      }
+
+      throw new Error('La asistencia tardó demasiado. Intenta de nuevo o usa el modo manual.')
+    } catch (error) {
+      setAssistStatus('error')
+      setAssistMessage(error instanceof Error ? error.message : 'No se pudo completar la asistencia.')
+    }
+  }
+
+  const applyDeformationProposal = (proposal: DeformationProposal) => {
+    if (!normalizedActive || !activeId) return
+    const validation = validateSurface({
+      ...normalizedActive,
+      gridSize: proposal.gridSize,
+      meshPoints: proposal.meshPoints,
+    })
+
+    if (!validation.ok) {
+      setAssistStatus('error')
+      setAssistMessage(`La propuesta no es válida: ${validation.errors.join('; ')}`)
+      return
+    }
+
+    const cornerSet = new Set(getCornerIndices(proposal.gridSize) as unknown as number[])
+    const pinnedPoints = proposal.meshPoints
+      .map((_, index) => index)
+      .filter(index => !cornerSet.has(index))
+
+    updateState({
+      ...surfaces,
+      [activeId]: {
+        ...normalizedActive,
+        gridSize: proposal.gridSize,
+        meshPoints: proposal.meshPoints.map(point => ({
+          x: Number(point.x.toFixed(1)),
+          y: Number(point.y.toFixed(1)),
+        })),
+        pinnedPoints,
+        assistSource: proposal.source,
+        assistVersion: proposal.workerVersion,
+        assistConfidence: proposal.confidence,
+        assistWarnings: proposal.warnings,
+        generatedAt: new Date().toISOString(),
+      },
+    })
+    setEditMode('preview')
+    setAssistStatus('ready')
+    setAssistMessage(`Propuesta "${proposal.label}" aplicada. Revisa el preview antes de publicar.`)
+  }
+
+  const exportActiveSurface = async () => {
+    if (!normalizedActive) return
+    const payload = JSON.stringify(normalizedActive, null, 2)
+    try {
+      await navigator.clipboard.writeText(payload)
+      setAssistMessage('JSON copiado al portapapeles.')
+    } catch {
+      setImportJson(payload)
+      setAssistMessage('No se pudo copiar; dejé el JSON en el campo de importación.')
+    }
+  }
+
+  const importActiveSurface = () => {
+    if (!normalizedActive || !activeId || !importJson.trim()) return
+
+    try {
+      const parsed = JSON.parse(importJson) as Partial<CalibrationSurface>
+      const candidate: CalibrationSurface = {
+        ...normalizedActive,
+        ...parsed,
+        id: activeId,
+        label: parsed.label || normalizedActive.label,
+        type: 'mesh',
+      }
+      const validation = validateSurface(candidate)
+
+      if (!validation.ok) {
+        throw new Error(validation.errors.join('; '))
+      }
+
+      updateState({
+        ...surfaces,
+        [activeId]: candidate,
+      })
+      setAssistStatus('ready')
+      setAssistMessage('JSON importado en la zona activa.')
+    } catch (error) {
+      setAssistStatus('error')
+      setAssistMessage(error instanceof Error ? error.message : 'JSON inválido.')
+    }
   }
 
   // ─── Save ────────────────────────────────────────────────────
@@ -893,6 +1066,107 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               )}
             </div>
           </section>
+
+          {normalizedActive && (
+            <section className="bg-white border border-industrial-gray/20 p-5">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="font-heading font-black text-lg uppercase tracking-tighter">
+                    Asistir deformación
+                  </h3>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                    Usa tus 4 esquinas como zona fija y genera una malla que siga la tela.
+                  </p>
+                </div>
+                <span className={`px-2 py-1 border text-[9px] font-bold uppercase tracking-widest ${
+                  assistStatus === 'ready'
+                    ? 'border-green-500 text-green-700 bg-green-50'
+                    : assistStatus === 'error'
+                      ? 'border-red-300 text-red-700 bg-red-50'
+                      : assistStatus === 'idle'
+                        ? 'border-industrial-gray/20 text-industrial-gray'
+                        : 'border-industrial-warning text-industrial-black bg-industrial-warning/10'
+                }`}>
+                  {ASSIST_STATUS_LABELS[assistStatus]}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={requestDeformationAssistance}
+                disabled={assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'}
+                className="w-full bg-industrial-black text-white px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
+              >
+                {assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'
+                  ? 'Generando propuestas...'
+                  : 'Asistir deformación'}
+              </button>
+
+              {assistJobId && (
+                <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-industrial-gray break-all">
+                  Job GPU: {assistJobId}
+                </p>
+              )}
+
+              {assistMessage && (
+                <p className={`mt-3 font-mono text-[10px] uppercase tracking-widest ${
+                  assistStatus === 'error' ? 'text-red-600' : 'text-industrial-gray'
+                }`}>
+                  {assistMessage}
+                </p>
+              )}
+
+              {assistProposals.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {assistProposals.map(proposal => (
+                    <button
+                      key={proposal.id}
+                      type="button"
+                      onClick={() => applyDeformationProposal(proposal)}
+                      className="w-full border border-industrial-gray/20 p-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="font-bold text-[10px] uppercase tracking-widest">{proposal.label}</span>
+                        <span className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                          {proposal.gridSize}×{proposal.gridSize} / {Math.round(proposal.confidence * 100)}%
+                        </span>
+                      </span>
+                      {proposal.warnings.length > 0 && (
+                        <span className="block mt-2 font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                          {proposal.warnings.join(' · ')}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-5 border-t border-industrial-gray/10 pt-4">
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={exportActiveSurface}
+                    className="border border-industrial-gray/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                  >
+                    Exportar JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={importActiveSurface}
+                    className="border border-industrial-gray/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                  >
+                    Importar JSON
+                  </button>
+                </div>
+                <textarea
+                  value={importJson}
+                  onChange={event => setImportJson(event.target.value)}
+                  className="min-h-[86px] w-full border border-industrial-gray/20 bg-white px-3 py-2 text-[10px] font-mono outline-none focus:border-industrial-black"
+                  placeholder="Pega aquí una grilla exportada para reemplazar la zona activa..."
+                />
+              </div>
+            </section>
+          )}
 
           {/* Fine-tuning panel */}
           {normalizedActive && (
