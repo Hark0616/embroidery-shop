@@ -31,7 +31,6 @@ export default function OptionSelector({
         <div className="mb-8">
             <h3 className="font-heading font-bold text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
                 {label}
-                {selectedId && <span className="text-industrial-warning text-[10px] ml-auto font-normal normal-case opacity-50">Selected</span>}
             </h3>
 
             <div className={`
@@ -87,7 +86,7 @@ export default function OptionSelector({
                                 </div>
                                 {type === 'grid' && (
                                     <div className={`text-[10px] mt-1 font-mono uppercase tracking-widest ${isSelected ? 'text-industrial-warning' : 'text-gray-400'}`}>
-                                        Select
+                                        Elegir
                                     </div>
                                 )}
                             </div>

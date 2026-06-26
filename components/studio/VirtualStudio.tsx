@@ -21,14 +21,6 @@ interface VirtualStudioProps {
 
 type StudioStep = 'product' | 'design' | 'details' | 'checkout';
 
-const THREAD_COLORS = [
-    { id: 'original', name: 'Original', css: 'none' },
-    { id: 'oro', name: 'Oro Metálico', css: 'sepia(1) hue-rotate(5deg) saturate(3) brightness(1.1) contrast(1.2)' },
-    { id: 'plata', name: 'Plata Metálico', css: 'grayscale(1) brightness(1.5) contrast(1.1)' },
-    { id: 'blanco', name: 'Blanco', css: 'grayscale(1) brightness(2)' },
-    { id: 'negro', name: 'Negro', css: 'grayscale(1) brightness(0)' },
-];
-
 function hasCalibratedSurfaces(mockup: GarmentMockup) {
     return !!(
         mockup.surfaces &&
@@ -46,25 +38,26 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     const initialProductSlug = searchParams.get('product');
     const initialDesignId = searchParams.get('design');
     const isCustomMode = searchParams.get('custom') === 'true';
+    const initialProduct = products.find(p => p.slug === initialProductSlug) || null;
+    const initialDesign = designs.find(d => d.id === initialDesignId) || null;
 
     const [selectedProduct, setSelectedProduct] = useState<BaseProduct | null>(
-        products.find(p => p.slug === initialProductSlug) || null
+        initialProduct
     );
 
     const [selectedDesign, setSelectedDesign] = useState<EmbroideryDesign | null>(
-        designs.find(d => d.id === initialDesignId) || null
+        initialDesign
     );
 
     const [activeStep, setActiveStep] = useState<StudioStep>(() => {
-        if (initialProductSlug && initialDesignId) return 'details';
-        if (initialProductSlug) return 'design';
-        if (initialDesignId) return 'product';
+        if (initialProduct && (initialDesign || isCustomMode)) return 'details';
+        if (initialProduct) return 'design';
+        if (initialDesign || isCustomMode) return 'product';
         return 'product';
     });
 
     const [selectedColor, setSelectedColor] = useState<string>('');
     const [selectedSize, setSelectedSize] = useState<string>('');
-    const [selectedThread, setSelectedThread] = useState<string>('original');
     const [selectedMockupId, setSelectedMockupId] = useState<string>('');
     
     // Placement State
@@ -209,7 +202,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
         if (product) {
             setSelectedProduct(product);
             updateUrl('product', slug);
-            setActiveStep('design');
+            setActiveStep(selectedDesign || isCustomUpload ? 'details' : 'design');
         }
     };
 
@@ -220,7 +213,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             setIsCustomUpload(false);
             setCustomPreviewUrl(null);
             updateUrl('design', id);
-            setActiveStep('details');
+            setActiveStep(selectedProduct ? 'details' : 'product');
             setShowDesignGallery(false);
         }
     };
@@ -233,7 +226,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             setCustomDesignName(file.name.replace(/\.[^/.]+$/, ''));
             setIsCustomUpload(true);
             setSelectedDesign(null);
-            setActiveStep('details');
+            setActiveStep(selectedProduct ? 'details' : 'product');
             setUploadError(null);
             setUploadedLogoUrl(null);
             
@@ -278,14 +271,11 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             : selectedDesign?.name || '';
             
         const placementLabel = placements[activePlacement]?.label || activePlacement;
-        const threadLabel = THREAD_COLORS.find(t => t.id === selectedThread)?.name || 'Original';
-
         const customMessage = `👕 PRENDA: ${selectedProduct.name}
 🎨 DISEÑO: ${designName}
 📍 ZONA: ${placementLabel}
 📏 TALLA: ${selectedSize}
 🎨 COLOR TELA: ${selectedColor}
-🧵 HILO: ${threadLabel}
 💰 TOTAL ESTIMADO: $${estimatedTotal.toLocaleString('es-CO')}
 
 Hola, quiero ordenar este bordado personalizado.`;
@@ -352,12 +342,6 @@ Hola, quiero ordenar este bordado personalizado.`;
         ? (placements[activePlacement]?.label || activePlacement)
         : 'Sin calibracion';
 
-    const threadOptions = THREAD_COLORS.map(t => ({
-        id: t.id,
-        name: t.name,
-        value: t.id
-    }));
-
     const isComplete = handleValidation() && (!isCustomUpload || (!isUploadingLogo && !!uploadedLogoUrl));
 
     const renderStepHeader = (step: StudioStep, label: string, isCompleted: boolean, stepNum: string) => (
@@ -410,7 +394,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                     rotateX={activePlacementConfig?.rotateX ?? 0}
                     rotateY={activePlacementConfig?.rotateY ?? 0}
                     isAdminMode={false}
-                    threadFilter={THREAD_COLORS.find(t => t.id === selectedThread)?.css || 'none'}
+                    threadFilter="none"
                     calibratedSurface={activeCalibratedSurface}
                     allowFallbackPlacement={false}
                 />
@@ -766,14 +750,6 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     items={sizeOptions}
                                     selectedId={selectedSize}
                                     onSelect={setSelectedSize}
-                                    type="list"
-                                />
-                                
-                                <OptionSelector
-                                    label="Estilo de Hilo"
-                                    items={threadOptions}
-                                    selectedId={selectedThread}
-                                    onSelect={setSelectedThread}
                                     type="list"
                                 />
                             </motion.div>
