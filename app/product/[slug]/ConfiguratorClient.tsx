@@ -46,9 +46,9 @@ interface ConfiguratorProps {
 }
 
 interface GalleryItem {
-    type: 'base' | 'mockup';
+    type: 'mockup';
     imageUrl: string;
-    mockup: GarmentMockup | null;
+    mockup: GarmentMockup;
     hasCalibratedPlacement: boolean;
 }
 
@@ -125,21 +125,10 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
         }
     }, [activePlacement, placements]);
 
-    // Gallery items combining base image and mockups sorted by active placement calibration
+    // Gallery items are only calibrated, published mockups. The product cover is not a sellable preview.
     const galleryItems = useMemo(() => {
         const items: GalleryItem[] = [];
-        
-        // 1. Base product image only when there are no calibrated mockups yet.
-        if (product.image_url && visibleMockups.length === 0) {
-            items.push({
-                type: 'base',
-                imageUrl: product.image_url,
-                mockup: null,
-                hasCalibratedPlacement: false,
-            });
-        }
-        
-        // 2. Mockups
+
         visibleMockups.forEach(mockup => {
             let surfaces: Record<string, CalibrationSurface> = {};
             if (
@@ -158,15 +147,13 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
             });
         });
         
-        // Sort items: calibrated mockups first; base image is only a no-mockup fallback.
+        // Sort items so mockups calibrated for the active placement appear first.
         items.sort((a, b) => {
-            if (a.type === 'base') return -1;
-            if (b.type === 'base') return 1;
             return (b.hasCalibratedPlacement ? 1 : 0) - (a.hasCalibratedPlacement ? 1 : 0);
         });
         
         return items;
-    }, [product.image_url, visibleMockups, activePlacement, selectedColor]);
+    }, [visibleMockups, activePlacement, selectedColor]);
 
     const [selectedGalleryIndex, setSelectedGalleryIndex] = useState<number>(0);
 
@@ -190,7 +177,7 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
     }, [activePlacement, galleryItems]);
 
     const activeItem = galleryItems[selectedGalleryIndex] || galleryItems[0] || null;
-    const currentMockup = activeItem?.type === 'mockup' ? activeItem.mockup : null;
+    const currentMockup = activeItem?.mockup || null;
 
     const activeCalibratedSurface = useMemo(() => {
         if (!currentMockup) return null;
@@ -208,22 +195,8 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
             return surfaces[activePlacement];
         }
         
-        // Fallback: Find another mockup of the same view that has calibrated surfaces for this placement
-        const fallbackMockup = productMockups.find(m =>
-            m.view === currentMockup.view &&
-            m.surfaces &&
-            typeof m.surfaces === 'object' &&
-            !Array.isArray(m.surfaces) &&
-            (m.surfaces as Record<string, CalibrationSurface>)[activePlacement]
-        );
-        
-        if (fallbackMockup?.surfaces) {
-            const fallbackSurfaces = fallbackMockup.surfaces as Record<string, CalibrationSurface>;
-            return fallbackSurfaces[activePlacement] || null;
-        }
-        
         return null;
-    }, [currentMockup, activePlacement, productMockups]);
+    }, [currentMockup, activePlacement]);
 
     const placementOptions = useMemo(() => Object.entries(placements).map(([key, config]) => ({
         id: key,
@@ -238,7 +211,9 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
 
     const designImageToRender = shouldRenderDesign ? selectedDesign?.image_url : undefined;
 
-    // Fallback coordinates for 2D render
+    const canCheckout = !!currentMockup && !!activeCalibratedSurface;
+
+    // Fallback coordinates are kept only for legacy admin props; public rendering requires calibration.
     const displayX = 50;
     const displayY = 35;
     const displayScale = 25;
@@ -246,22 +221,16 @@ export default function ConfiguratorClient({ product, products, designs, leadTim
     const rotateX = 0;
     const rotateY = 0;
 
-    // Shadow Map logic
-    const fallbackShadowMap = useMemo(() => {
-        if (!currentMockup) return null;
-        const match = productMockups.find(m => m.view === currentMockup.view && getMockupShadowForColor(m, selectedColor));
-        return match ? getMockupShadowForColor(match, selectedColor) : null;
-    }, [currentMockup, productMockups, selectedColor]);
-
-    const currentTextureMap = getMockupShadowForColor(currentMockup, selectedColor) || fallbackShadowMap || undefined;
+    const currentTextureMap = getMockupShadowForColor(currentMockup, selectedColor) || undefined;
 
     // Pricing
     const totalPrice = product.base_price + (selectedDesign?.price_modifier || 0);
 
     // WhatsApp Link
     const generateWhatsAppLink = () => {
+        if (!canCheckout) return '#';
         const phone = '573013732290';
-        const placementLabel = placements[activePlacement]?.label || 'Estándar (2D Centrado)';
+        const placementLabel = placements[activePlacement]?.label || activePlacement;
         const message = `Hola, quiero pedir:
 - Producto: ${product.name}
 - Talla: ${selectedSize}
@@ -316,11 +285,6 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                                             ✦
                                         </span>
                                     )}
-                                    {item.type === 'base' && (
-                                        <span className="absolute bottom-0 left-0 right-0 bg-gray-100/90 text-gray-500 text-[8px] font-mono text-center uppercase tracking-tighter py-0.5 border-t border-gray-200">
-                                            Prenda
-                                        </span>
-                                    )}
                                 </button>
                             );
                         })}
@@ -331,7 +295,7 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                 <div className="flex-1 aspect-[4/5] bg-industrial-light border border-gray-100 rounded-xl overflow-hidden shadow-sm relative flex items-center justify-center p-4">
                     <div className="w-full h-full relative">
                         <Visualizer
-                            productImage={activeItem?.imageUrl || product.image_url}
+                            productImage={activeItem?.imageUrl}
                             textureMapImage={currentTextureMap}
                             designImage={designImageToRender}
                             productName={product.name}
@@ -347,11 +311,10 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                             allowFallbackPlacement={false}
                         />
                     </div>
-                    {/* Helper overlay when design is not rendered on this mockup */}
-                    {!shouldRenderDesign && selectedDesign && (
+                    {!canCheckout && (
                         <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-sm border border-gray-200/50 p-2.5 rounded-lg text-center shadow-lg transition-all duration-300">
                             <p className="text-[11px] font-medium text-gray-600">
-                                Vista de referencia. El diseño se bordará en: <span className="font-bold text-industrial-black">{placements[activePlacement]?.label || activePlacement}</span>
+                                Esta prenda aun no tiene un mockup calibrado publicado para venderse en linea.
                             </p>
                         </div>
                     )}
@@ -530,6 +493,17 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                         </div>
                     )}
 
+                    {placementOptions.length === 0 && (
+                        <div className="mb-10 rounded-lg border border-industrial-warning/30 bg-industrial-warning/10 p-4">
+                            <p className="text-xs font-black uppercase tracking-widest text-industrial-black">
+                                Falta mockup calibrado
+                            </p>
+                            <p className="mt-2 text-[11px] font-mono uppercase tracking-wider text-industrial-gray">
+                                Publica al menos un mockup calibrado para activar la compra de esta prenda.
+                            </p>
+                        </div>
+                    )}
+
                     {/* 5. Selecciona Talla */}
                     <div className="mb-10">
                         <h3 className="font-bold text-xs uppercase tracking-widest mb-4 text-industrial-gray">
@@ -567,12 +541,24 @@ Entiendo que el tiempo de espera es de: ${leadTime}`;
                         href={generateWhatsAppLink()}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full block bg-industrial-black text-industrial-warning font-black text-center py-5 rounded-lg uppercase tracking-widest text-base hover:bg-gray-900 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-lg"
+                        onClick={(event) => {
+                            if (!canCheckout) {
+                                event.preventDefault();
+                            }
+                        }}
+                        aria-disabled={!canCheckout}
+                        className={`w-full block font-black text-center py-5 rounded-lg uppercase tracking-widest text-base transition-all shadow-lg ${
+                            canCheckout
+                                ? 'bg-industrial-black text-industrial-warning hover:bg-gray-900 hover:scale-[1.01] active:scale-[0.99]'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
                     >
-                        Comprar por WhatsApp — ${totalPrice.toLocaleString()}
+                        {canCheckout ? `Comprar por WhatsApp — $${totalPrice.toLocaleString()}` : 'Falta mockup calibrado'}
                     </a>
                     <p className="text-center text-[10px] text-gray-400 mt-4 uppercase tracking-wider">
-                        Serás redirigido a WhatsApp para confirmar los detalles del pedido.
+                        {canCheckout
+                            ? 'Serás redirigido a WhatsApp para confirmar los detalles del pedido.'
+                            : 'Esta prenda debe calibrarse y publicarse antes de recibir pedidos.'}
                     </p>
                 </div>
             </div>

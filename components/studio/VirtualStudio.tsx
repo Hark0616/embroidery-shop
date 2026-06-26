@@ -106,21 +106,8 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
             return selectedMockup.surfaces as Record<string, CalibrationSurface>;
         }
 
-        // Fallback: Find another mockup of the same view that has calibrated surfaces
-        const fallbackMockup = productMockups.find(m =>
-            m.view === selectedMockup?.view &&
-            m.surfaces &&
-            typeof m.surfaces === 'object' &&
-            !Array.isArray(m.surfaces) &&
-            Object.keys(m.surfaces).length > 0
-        );
-
-        if (fallbackMockup?.surfaces) {
-            return fallbackMockup.surfaces as Record<string, CalibrationSurface>;
-        }
-
         return null;
-    }, [selectedMockup, productMockups]);
+    }, [selectedMockup]);
 
     const placements = useMemo(() => {
         const allCalibrated: Record<string, any> = {};
@@ -149,6 +136,12 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     useEffect(() => {
         const placementView = placements[activePlacement]?.view || 'front';
         const matchingMockup = visibleMockups.find(
+            m =>
+                m.surfaces &&
+                typeof m.surfaces === 'object' &&
+                !Array.isArray(m.surfaces) &&
+                !!(m.surfaces as Record<string, CalibrationSurface>)[activePlacement]
+        ) || visibleMockups.find(
             m => m.view === placementView
         ) || visibleMockups[0];
         
@@ -264,6 +257,7 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     const handleValidation = () => {
         if (!selectedProduct) return false;
         if (!selectedDesign && !isCustomUpload) return false;
+        if (!activeCalibratedSurface) return false;
         if (!selectedColor) return false;
         if (!selectedSize) return false;
         return true;
@@ -277,13 +271,13 @@ export default function VirtualStudio({ products, designs, mockups = [] }: Virtu
     }, [selectedProduct, isCustomUpload]);
 
     const handleWhatsAppCheckout = () => {
-        if (!selectedProduct) return;
+        if (!selectedProduct || !activeCalibratedSurface) return;
 
         const designName = isCustomUpload
             ? `Diseño personalizado: ${customDesignName || 'Imagen adjunta'}${uploadedLogoUrl ? ` (Descarga: ${uploadedLogoUrl})` : ''}`
             : selectedDesign?.name || '';
             
-        const placementLabel = placements[activePlacement]?.label || 'Por defecto';
+        const placementLabel = placements[activePlacement]?.label || activePlacement;
         const threadLabel = THREAD_COLORS.find(t => t.id === selectedThread)?.name || 'Original';
 
         const customMessage = `👕 PRENDA: ${selectedProduct.name}
@@ -313,14 +307,7 @@ Hola, quiero ordenar este bordado personalizado.`;
 
     const colorImages = selectedProduct?.color_images as Record<string, string> | undefined;
     const currentBaseImage = selectedMockup ? getMockupImageForColor(selectedMockup, selectedColor) : null;
-    // Find shadow map fallback from another mockup of the same view if the active mockup does not have one
-    const fallbackShadowMap = useMemo(() => {
-        if (!selectedMockup) return null;
-        const match = productMockups.find(m => m.view === selectedMockup.view && getMockupShadowForColor(m, selectedColor));
-        return match ? getMockupShadowForColor(match, selectedColor) : null;
-    }, [selectedMockup, productMockups, selectedColor]);
-
-    const currentTextureMap = getMockupShadowForColor(selectedMockup, selectedColor) || fallbackShadowMap || selectedProduct?.texture_map_url;
+    const currentTextureMap = getMockupShadowForColor(selectedMockup, selectedColor) || selectedProduct?.texture_map_url;
     const designImageForPreview = activeCalibratedSurface
         ? (isCustomUpload ? customPreviewUrl : selectedDesign?.image_url)
         : undefined;
@@ -360,6 +347,10 @@ Hola, quiero ordenar este bordado personalizado.`;
         name: config.label,
         value: key
     })), [placements]);
+
+    const activePlacementLabel = activeCalibratedSurface
+        ? (placements[activePlacement]?.label || activePlacement)
+        : 'Sin calibracion';
 
     const threadOptions = THREAD_COLORS.map(t => ({
         id: t.id,
@@ -426,10 +417,10 @@ Hola, quiero ordenar este bordado personalizado.`;
                 {missingPublishedMockups && (
                     <div className="mt-3 border border-industrial-warning bg-industrial-warning/10 p-4">
                         <p className="font-bold text-xs uppercase tracking-widest text-industrial-black">
-                            Esta prenda aun no tiene mockups publicados
+                            Esta prenda aun no tiene mockups calibrados publicados
                         </p>
                         <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mt-1">
-                            Publica al menos un mockup calibrado para que aparezca aqui.
+                            Sin una superficie calibrada no se muestra ningun bordado en esta prenda.
                         </p>
                     </div>
                 )}
@@ -751,6 +742,17 @@ Hola, quiero ordenar este bordado personalizado.`;
                                     />
                                 )}
 
+                                {!activeCalibratedSurface && (
+                                    <div className="border border-industrial-warning bg-industrial-warning/10 p-4">
+                                        <p className="font-bold text-xs uppercase tracking-widest text-industrial-black">
+                                            Falta mockup calibrado
+                                        </p>
+                                        <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mt-1">
+                                            Esta prenda no puede venderse desde Studio hasta publicar una superficie calibrada para este mockup.
+                                        </p>
+                                    </div>
+                                )}
+
                                 <OptionSelector
                                     label="Color de la Prenda"
                                     items={colorOptions}
@@ -776,7 +778,7 @@ Hola, quiero ordenar este bordado personalizado.`;
                                 />
                             </motion.div>
                         ) : (
-                            renderStepHeader('details', `Detalles: ${(placements[activePlacement]?.label || (placementOptions.length > 0 ? 'Bordado' : 'Estándar'))} / ${selectedColor}`, handleValidation(), '3')
+                            renderStepHeader('details', `Detalles: ${activePlacementLabel} / ${selectedColor}`, handleValidation(), '3')
                         )}
                     </div>
                 )}
@@ -797,7 +799,9 @@ Hola, quiero ordenar este bordado personalizado.`;
                                 ? 'Subiendo tu logo...' 
                                 : isComplete 
                                     ? 'Enviar Ficha a Producción' 
-                                    : 'Completa tu selección'}
+                                    : !activeCalibratedSurface
+                                        ? 'Falta mockup calibrado'
+                                        : 'Completa tu selección'}
                         </span>
                     </button>
                     {isComplete && (
