@@ -56,7 +56,7 @@ Correccion:
 
 ### Studio
 
-El Studio es util, pero no debe ser el destino principal de anuncios.
+El Studio es util como herramienta de personalizacion, pero no es necesario para vender productos prearmados.
 
 Riesgo:
 - Demasiadas decisiones para trafico frio.
@@ -65,6 +65,7 @@ Riesgo:
 
 Correccion:
 - Studio debe ser secundario: para clientes que quieren crear algo propio.
+- Los productos recomendados no deben depender del Studio publico.
 - La compra de ads debe ir a producto armado.
 
 ## Estrategia recomendada
@@ -80,6 +81,7 @@ Crear dos modos publicos:
    - Para personalizacion avanzada.
    - Ideal para clientes recurrentes o pedidos especiales.
    - No debe ser el primer paso del trafico frio.
+   - No es obligatorio para vender recomendados.
 
 ## Zona de recomendados
 
@@ -92,7 +94,7 @@ Esta zona puede aparecer en:
 - Paginas de producto, como productos relacionados.
 
 Funcion:
-- Mostrar combinaciones ya resueltas: prenda + diseno + ubicacion + color.
+- Mostrar combinaciones ya resueltas: prenda + diseno/arte + color + fotos finales.
 - Reducir decision del cliente.
 - Validar rapidamente que combinaciones venden mejor antes de construir un catalogo grande.
 
@@ -105,6 +107,36 @@ Regla UX:
 - La tarjeta de recomendado debe abrir una pagina de producto armado.
 - No debe mandar directo al Studio como primer paso.
 - Puede tener un enlace secundario: "Personalizar algo parecido".
+- Debe usar fotos finales del producto, no el calibrador como interfaz publica.
+
+## Drops y categorias
+
+Conviene administrar las prendas prearmadas por drops o categorias comerciales.
+
+Ejemplos:
+- Drop: Anime oscuro
+- Drop: Shonen energy
+- Drop: Minimal negro
+- Drop: Flores crema
+- Categoria interna: Hoodies
+- Categoria interna: Gorras
+
+Un drop debe funcionar como una coleccion vendible:
+- Nombre
+- Slug
+- Descripcion corta
+- Imagen/banner
+- Estado: borrador, publicado, oculto
+- Orden
+- Productos asociados
+
+La idea de "Dragon Ball" o "X anime" funciona bien como organizacion mental, pero para anuncios pagados y URLs publicas hay que cuidar propiedad intelectual. Si no hay licencia, es mas seguro usar nombres de estilo:
+- "Shonen energy"
+- "Guerrero anime"
+- "Anime clasico"
+- "Pelea final"
+
+Puedes seguir usando nombres internos mas directos en Admin si te ayudan a organizar, pero la cara publica deberia evitar prometer productos oficiales o usar marcas/personajes protegidos.
 
 ## Modelo de producto correcto
 
@@ -114,25 +146,29 @@ Campos recomendados:
 - nombre
 - slug
 - estado: borrador, publicado, agotado
-- prenda base
-- diseno
-- ubicacion calibrada
+- drop/categoria
+- prenda base opcional
+- diseno/arte opcional
+- ubicacion opcional
 - color principal
 - colores habilitados
 - tallas habilitadas
 - precio final
 - precio promocional opcional
-- imagen hero o mockup principal
+- imagen hero
+- galeria de fotos finales
 - texto corto de venta
-- categoria/mood
 - tags para ads
 - prioridad/orden
+- sku o codigo interno
 
 Ejemplos:
-- Hoodie Goku Silhouette Negro
+- Hoodie Guerrero Anime Negro
 - Gorra Minimal Line Negra
 - Hoodie Flores Crema
 - Camiseta Shonen Blanco
+
+Nota: para productos prearmados, las fotos finales mandan. El mockup calibrado puede servir internamente para crear la visual, pero el producto publico debe mostrar imagenes finales cargadas en su galeria.
 
 ## Flujo ideal para ads
 
@@ -140,7 +176,7 @@ Anuncio:
 > Hoodie bordado estilo anime. Hecho bajo pedido. 8 dias habiles.
 
 Landing:
-1. Hero con el mockup final de la prenda.
+1. Hero con foto final de la prenda.
 2. Nombre claro del producto.
 3. Precio final.
 4. Selector simple: talla y color.
@@ -154,13 +190,14 @@ El cliente nunca deberia tener que elegir diseno ni ubicacion en esta landing.
 ## Reglas de publicacion
 
 Un producto armado solo puede publicarse si:
-- La prenda base esta activa.
-- El diseno esta activo.
-- Existe al menos un mockup publico y publicado.
-- La ubicacion elegida existe en la superficie calibrada.
-- El color principal tiene imagen de mockup disponible.
+- Pertenece a un drop/categoria publicada u oculta valida.
+- Tiene al menos una foto final.
 - Hay al menos una talla habilitada.
+- Tiene color o variante definida.
 - Tiene precio final.
+- Tiene CTA activo.
+
+Si esta conectado a una prenda base o diseno interno, esos registros deben existir, pero no son obligatorios para vender una foto final ya producida.
 
 ## Ads y colecciones
 
@@ -199,10 +236,10 @@ Para ads pagados, es mas seguro:
 
 ### Hito 1 - Producto armado
 
-Crear tabla, tipos y acciones para productos armados.
+Crear tabla, tipos y acciones para drops y productos armados.
 
 Resultado:
-- Admin puede crear una oferta vendible desde una prenda + diseno + ubicacion.
+- Admin puede crear un drop/categoria y una oferta vendible con fotos finales.
 
 ### Hito 2 - Recomendados publicos
 
@@ -220,7 +257,7 @@ Resultado:
 
 ### Hito 4 - Admin para colecciones
 
-Agrupar productos armados por mood/drop.
+Administrar drops/categorias y ordenar productos armados.
 
 Resultado:
 - Puedes lanzar colecciones de 6 a 12 productos sin saturarte.
