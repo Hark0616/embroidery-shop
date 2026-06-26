@@ -14,6 +14,51 @@ function hasCalibratedSurface(surfaces: unknown) {
   return Object.keys(surfaces).length > 0
 }
 
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+async function getUniqueProductSlug(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  value: string,
+  excludeProductId?: string,
+) {
+  const baseSlug = slugify(value) || `prenda-${Date.now()}`
+  let candidate = baseSlug
+  let suffix = 2
+
+  while (true) {
+    let query = supabase
+      .from('base_products')
+      .select('id')
+      .eq('slug', candidate)
+      .limit(1)
+
+    if (excludeProductId) {
+      query = query.neq('id', excludeProductId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error checking product slug:', error)
+      throw new Error('Failed to validate product slug')
+    }
+
+    if (!data || data.length === 0) {
+      return candidate
+    }
+
+    candidate = `${baseSlug}-${suffix}`
+    suffix += 1
+  }
+}
+
 export async function createProduct(formData: FormData) {
   await requireAdmin()
   const supabase = await createClient()
@@ -23,7 +68,7 @@ export async function createProduct(formData: FormData) {
   }
 
   const name = formData.get('name') as string
-  const slug = formData.get('slug') as string
+  const rawSlug = formData.get('slug') as string
   const productType = (formData.get('product_type') as string) || 'camiseta'
   const basePrice = parseFloat(formData.get('base_price') as string)
   const colors = formData.getAll('colors') as string[]
@@ -41,6 +86,8 @@ export async function createProduct(formData: FormData) {
   if (!file || file.size === 0) {
     throw new Error('Image is required')
   }
+
+  const slug = await getUniqueProductSlug(supabase, rawSlug || name)
 
   // Upload image
   const imageUrl = await uploadImage(file, 'products')
@@ -146,7 +193,7 @@ export async function updateProductDetails(formData: FormData) {
 
   const productId = formData.get('product_id') as string
   const name = formData.get('name') as string
-  const slug = formData.get('slug') as string
+  const rawSlug = formData.get('slug') as string
   const productType = formData.get('product_type') as string
   const basePrice = parseFloat(formData.get('base_price') as string)
   const stockStatus = formData.get('stock_status') as string
@@ -161,9 +208,11 @@ export async function updateProductDetails(formData: FormData) {
     throw new Error('Debes seleccionar al menos una talla.')
   }
 
-  if (!productId || !name || !slug) {
+  if (!productId || !name) {
     throw new Error('Missing required fields')
   }
+
+  const slug = await getUniqueProductSlug(supabase, rawSlug || name, productId)
 
   const { error: updateError } = await supabase
     .from('base_products')

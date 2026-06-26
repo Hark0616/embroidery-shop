@@ -89,10 +89,35 @@ function getWorkflowState(product: ProductWithMockups) {
 
 export default async function PrendasPage() {
   const supabase = await createClient()
-  const { data: products } = await supabase
-    ?.from('base_products')
-    .select('*, garment_mockups(id, status, is_public, surfaces, image_url, color_name, shadow_map_url, variants)')
-    .order('created_at', { ascending: false }) || { data: [] }
+  let products: ProductWithMockups[] = []
+  let loadError = ''
+  let migrationWarning = ''
+
+  if (supabase) {
+    const result = await supabase
+      .from('base_products')
+      .select('*, garment_mockups(id, status, is_public, surfaces, image_url, color_name, shadow_map_url, variants)')
+      .order('created_at', { ascending: false })
+
+    if (result.error) {
+      console.error('Error loading garments with mockup variants:', result.error)
+
+      const fallback = await supabase
+        .from('base_products')
+        .select('*, garment_mockups(id, status, is_public, surfaces, image_url, color_name, shadow_map_url)')
+        .order('created_at', { ascending: false })
+
+      if (fallback.error) {
+        console.error('Error loading garments fallback:', fallback.error)
+        loadError = fallback.error.message
+      } else {
+        products = (fallback.data || []) as ProductWithMockups[]
+        migrationWarning = 'Falta aplicar la migracion de variantes de mockup. Las prendas existen, pero algunos datos nuevos se cargaron en modo compatibilidad.'
+      }
+    } else {
+      products = (result.data || []) as ProductWithMockups[]
+    }
+  }
 
   return (
     <div className="p-8 bg-industrial-light min-h-screen">
@@ -117,8 +142,30 @@ export default async function PrendasPage() {
         </div>
       </div>
 
+      {migrationWarning && (
+        <div className="bg-industrial-warning/10 border border-industrial-warning p-5 mb-6">
+          <h2 className="font-heading font-black text-lg uppercase tracking-tighter text-industrial-black mb-1">
+            Prendas cargadas en modo compatibilidad
+          </h2>
+          <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest leading-relaxed">
+            {migrationWarning} Ejecuta <span className="font-bold">supabase/migrations/20260626_add_mockup_variants.sql</span>.
+          </p>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="bg-white border border-red-200 p-8 mb-6">
+          <h2 className="font-heading font-black text-xl uppercase tracking-tighter text-red-700 mb-2">
+            No se pudieron cargar las prendas
+          </h2>
+          <p className="font-mono text-xs text-industrial-gray uppercase tracking-widest leading-relaxed">
+            {loadError}
+          </p>
+        </div>
+      )}
+
       {/* Tabla de Prendas */}
-      <div className="bg-white border border-industrial-gray/20 shadow-sm overflow-hidden">
+      {!loadError && <div className="bg-white border border-industrial-gray/20 shadow-sm overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-industrial-black text-industrial-white font-mono text-xs uppercase tracking-wider">
             <tr>
@@ -206,7 +253,7 @@ export default async function PrendasPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </div>}
     </div>
   )
 }

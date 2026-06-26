@@ -18,6 +18,37 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
+async function getUniqueMockupSlug(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  productId: string,
+  value: string,
+) {
+  const baseSlug = slugify(value) || `mockup-${Date.now()}`
+  let candidate = baseSlug
+  let suffix = 2
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('garment_mockups')
+      .select('id')
+      .eq('product_id', productId)
+      .eq('slug', candidate)
+      .limit(1)
+
+    if (error) {
+      console.error('Error checking mockup slug:', error)
+      throw new Error('Failed to validate mockup slug')
+    }
+
+    if (!data || data.length === 0) {
+      return candidate
+    }
+
+    candidate = `${baseSlug}-${suffix}`
+    suffix += 1
+  }
+}
+
 export async function createMockup(formData: FormData) {
   await requireAdmin()
   const supabase = await createClient()
@@ -92,7 +123,7 @@ export async function createMockup(formData: FormData) {
 
   const primaryVariant = variants[0]
 
-  const slug = slugify(rawSlug || name)
+  const slug = await getUniqueMockupSlug(supabase, productId, rawSlug || name)
 
   const { data: mockup, error } = await supabase.from('garment_mockups').insert({
     product_id: productId,
