@@ -214,6 +214,22 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [activeTab, setActiveTab] = useState<'zones' | 'mesh' | 'preview'>('zones')
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
+  const leftSectionRef = useRef<HTMLElement>(null)
+  const [leftHeight, setLeftHeight] = useState<number | null>(null)
+
+  useEffect(() => {
+    const element = leftSectionRef.current
+    if (!element) return
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setLeftHeight(entry.target.getBoundingClientRect().height)
+      }
+    })
+
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   const previewVariant = useMemo(
     () => mockupVariants.find(variant => variant.id === previewVariantId) || mockupVariants[0],
@@ -756,10 +772,13 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
         : `grid ${showSidebar ? 'grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)]' : 'grid-cols-1'} gap-6`
       }>
         {/* Left: Image + Overlay */}
-        <section className={isFullscreen 
-          ? "bg-white border border-industrial-gray/20 p-4 flex flex-col justify-center items-center h-full overflow-hidden" 
-          : "bg-white border border-industrial-gray/20 p-4"
-        }>
+        <section 
+          ref={leftSectionRef}
+          className={isFullscreen 
+            ? "bg-white border border-industrial-gray/20 p-4 flex flex-col justify-center items-center h-full overflow-hidden" 
+            : "bg-white border border-industrial-gray/20 p-4"
+          }
+        >
           <div className="w-full flex items-center justify-between gap-3 mb-3">
             <div className="min-w-0">
               <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
@@ -1047,7 +1066,13 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
         {/* Right: Controls */}
         {showSidebar && (
-          <aside className="flex flex-col bg-white border border-industrial-gray/20" style={{ height: isFullscreen ? 'calc(100vh - 4.5rem)' : '720px', minHeight: '600px', maxHeight: isFullscreen ? 'calc(100vh - 4.5rem)' : 'calc(100vh - 8rem)' }}>
+          <aside 
+            className="flex flex-col bg-white border border-industrial-gray/20 shadow-sm" 
+            style={{ 
+              height: isFullscreen ? 'calc(100vh - 4.5rem)' : leftHeight ? `${leftHeight}px` : '720px', 
+              maxHeight: isFullscreen ? 'calc(100vh - 4.5rem)' : leftHeight ? `${leftHeight}px` : '100%' 
+            }}
+          >
             {/* Tabs Header */}
             <div className="grid grid-cols-3 border-b border-industrial-gray/20 bg-gray-50 font-mono text-[9px] md:text-[10px] font-bold uppercase tracking-widest">
               <button
