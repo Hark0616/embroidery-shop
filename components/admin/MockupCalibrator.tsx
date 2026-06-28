@@ -911,7 +911,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
               {/* Grid lines visualization */}
               {normalizedActive && editMode !== 'preview' && (
-                <svg className="absolute inset-0 z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <svg className="absolute inset-0 w-full h-full z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                   {/* Draw grid lines */}
                   {Array.from({ length: normalizedActive.gridSize }).map((_, row) => (
                     Array.from({ length: normalizedActive.gridSize - 1 }).map((_, col) => {
@@ -962,7 +962,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 const corners = getCornerIndices(norm.gridSize)
                 const pts = corners.map(i => norm.meshPoints[i])
                 return (
-                  <svg key={surface.id} className="absolute inset-0 z-10 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <svg key={surface.id} className="absolute inset-0 w-full h-full z-10 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                     <polygon
                       points={pts.map(p => `${p.x},${p.y}`).join(' ')}
                       fill="rgba(10,10,10,0.06)"
