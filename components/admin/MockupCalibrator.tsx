@@ -1242,19 +1242,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                           </div>
                         </div>
 
-                        {/* Size */}
-                        <label className="block">
-                          <span className="block font-bold text-xs uppercase tracking-widest mb-1.5">Tamaño recomendado</span>
-                          <select
-                            value={normalizedActive.size}
-                            onChange={e => updateActiveSurface(s => ({ ...s, size: e.target.value as CalibrationSurface['size'] }))}
-                            className="w-full border border-industrial-gray/20 px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
-                          >
-                            {Object.entries(SIZE_LABELS).map(([v, l]) => (
-                              <option key={v} value={v}>{l}</option>
-                            ))}
-                          </select>
-                        </label>
+
 
                         {/* Reset grid */}
                         <button
