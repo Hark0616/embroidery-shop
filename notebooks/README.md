@@ -14,7 +14,9 @@ Use this when RunPod is not configured or you want to process a mockup with a te
 ```python
 !pip install -q pillow requests numpy opencv-python transformers accelerate safetensors
 USE_DEPTH_ANYTHING = True
-%run texere_deformation_colab.py
+OUTPUT_GRID_SIZE = 7
+DEFORMATION_STRENGTH = 1.35
+%run -i texere_deformation_colab.py
 ```
 
 7. Upload the exported `texere-colab-*.json`.
@@ -22,5 +24,4 @@ USE_DEPTH_ANYTHING = True
 9. In Texere admin, paste the result in `JSON Avanzado` and click `Importar resultado`.
 10. Choose the best proposal, preview it, then save or publish.
 
-If the depth model is unavailable, the script falls back to a shading/texture signal and still returns valid proposals.
-
+The `-i` in `%run -i` is important: it lets the script read `USE_DEPTH_ANYTHING`, `OUTPUT_GRID_SIZE`, and `DEFORMATION_STRENGTH` from the notebook cell. The first real depth run should print `Depth model enabled` and usually takes much longer than a couple of seconds because it loads the model. If the depth model is unavailable, the script falls back to a shading/texture signal and still returns valid proposals.

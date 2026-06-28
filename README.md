@@ -52,4 +52,4 @@ DEFORMATION_WORKER_VERSION=runpod-depth-normal-v1
 
 El worker esta en `workers/deformation` y devuelve propuestas compatibles con `garment_mockups.surfaces`.
 
-Tambien existe un flujo sin servidor GPU: exportar `Paquete Colab` desde el calibrador, ejecutar `notebooks/texere_deformation_colab.py` en Google Colab y volver a importar el `result.json` en el admin.
+Tambien existe un flujo sin servidor GPU: exportar `Paquete Colab` desde el calibrador, ejecutar `notebooks/texere_deformation_colab.py` en Google Colab con `%run -i`, y volver a importar el `result.json` en el admin. Para resultados mas realistas usa GPU, `USE_DEPTH_ANYTHING=True`, `OUTPUT_GRID_SIZE=7` y `DEFORMATION_STRENGTH=1.35`.

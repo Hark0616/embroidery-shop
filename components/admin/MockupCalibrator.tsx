@@ -666,7 +666,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
       `texere-colab-${fileSafe(mockup.name)}-${fileSafe(normalizedActive.id)}.json`,
     )
     setAssistStatus('ready')
-    setAssistMessage('Paquete Colab descargado. Súbelo al notebook y luego importa el result.json aquí.')
+    setAssistMessage('Paquete Colab descargado. En Colab usa %run -i con OUTPUT_GRID_SIZE=7 para IA real; luego importa el result.json aquí.')
   }
 
   const importJsonText = (rawText: string) => {
