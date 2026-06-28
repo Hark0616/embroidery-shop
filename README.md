@@ -23,6 +23,17 @@ npm run dev
 
 Abre [http://localhost:3000](http://localhost:3000).
 
+### Admin local sin sesion Supabase
+
+Para trabajar en el admin local sin tener una cuenta configurada en Supabase Auth, agrega esto en `.env.local` y reinicia `npm run dev`:
+
+```bash
+LOCAL_ADMIN_BYPASS=true
+LOCAL_ADMIN_EMAIL=local-admin@texere.dev
+```
+
+Con eso `/admin` usa un usuario local con rol `admin`, y el formulario de `/login` tambien te deja entrar. Este bypass solo funciona fuera de `NODE_ENV=production`; para leer o guardar drops, disenos y mockups sigues necesitando las variables de Supabase apuntando a tu base de datos.
+
 ## Verificacion
 
 ```bash

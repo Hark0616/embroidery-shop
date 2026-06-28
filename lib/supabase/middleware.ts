@@ -1,8 +1,19 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isLocalAdminBypassEnabled } from '@/lib/auth/local-bypass'
 
 export async function updateSession(request: NextRequest) {
   try {
+    if (isLocalAdminBypassEnabled()) {
+      if (request.nextUrl.pathname === '/login') {
+        const url = request.nextUrl.clone()
+        url.pathname = '/admin'
+        return NextResponse.redirect(url)
+      }
+
+      return NextResponse.next({ request })
+    }
+
     // Sanitize URL: remove quotes, whitespace, and ensure protocol
     let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/["']/g, "").trim();
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.replace(/["']/g, "").trim();
