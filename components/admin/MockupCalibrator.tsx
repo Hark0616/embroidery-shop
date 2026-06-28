@@ -17,6 +17,11 @@ import {
 import { getMockupVariants } from '@/lib/mockup-variants'
 import { validateSurface } from '@/lib/deformation/surface-validation'
 import type { DeformationProposal } from '@/lib/deformation/types'
+import {
+  assertValidImportedProposals,
+  buildCalibrationTransferPackage,
+  extractDeformationProposalsFromImport,
+} from '@/lib/deformation/transfer'
 
 type SurfaceMap = Record<string, CalibrationSurface>
 type EditMode = 'corners' | 'grid' | 'preview'
@@ -97,6 +102,28 @@ function normalizeId(value: string) {
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function downloadJsonFile(payload: unknown, fileName: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function fileSafe(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'mockup'
 }
 
 // ─── Undo/Redo ─────────────────────────────────────────────────
@@ -596,30 +623,51 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     }
   }
 
+  const exportColabPackage = () => {
+    if (!normalizedActive) return
+
+    const payload = buildCalibrationTransferPackage({
+      mockup: {
+        id: mockup.id,
+        name: mockup.name,
+        view: mockup.view,
+        imageUrl: previewMockupImage,
+        variantId: previewVariant?.id || null,
+        variantColorName: previewVariant?.colorName || null,
+      },
+      product: {
+        name: mockup.base_products?.name || null,
+        slug: mockup.base_products?.slug || null,
+        productType: mockup.base_products?.product_type || null,
+      },
+      surface: normalizedActive,
+    })
+
+    downloadJsonFile(
+      payload,
+      `texere-colab-${fileSafe(mockup.name)}-${fileSafe(normalizedActive.id)}.json`,
+    )
+    setAssistStatus('ready')
+    setAssistMessage('Paquete Colab descargado. Súbelo al notebook y luego importa el result.json aquí.')
+  }
+
   const importActiveSurface = () => {
     if (!normalizedActive || !activeId || !importJson.trim()) return
 
     try {
-      const parsed = JSON.parse(importJson) as Partial<CalibrationSurface>
-      const candidate: CalibrationSurface = {
-        ...normalizedActive,
-        ...parsed,
-        id: activeId,
-        label: parsed.label || normalizedActive.label,
-        type: 'mesh',
-      }
-      const validation = validateSurface(candidate)
+      const parsed = JSON.parse(importJson)
+      const proposals = extractDeformationProposalsFromImport(parsed)
+      assertValidImportedProposals(proposals)
 
-      if (!validation.ok) {
-        throw new Error(validation.errors.join('; '))
+      if (proposals.length === 1) {
+        applyDeformationProposal(proposals[0])
+        setAssistMessage('Resultado importado y aplicado en la zona activa.')
+        return
       }
 
-      updateState({
-        ...surfaces,
-        [activeId]: candidate,
-      })
+      setAssistProposals(proposals)
       setAssistStatus('ready')
-      setAssistMessage('JSON importado en la zona activa.')
+      setAssistMessage('Resultado importado. Elige una propuesta para aplicarla.')
     } catch (error) {
       setAssistStatus('error')
       setAssistMessage(error instanceof Error ? error.message : 'JSON inválido.')
@@ -1149,16 +1197,25 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                           </span>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={requestDeformationAssistance}
-                          disabled={assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'}
-                          className="w-full bg-industrial-black text-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
-                        >
-                          {assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'
-                            ? 'Generando propuestas...'
-                            : 'Asistir deformación'}
-                        </button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={requestDeformationAssistance}
+                            disabled={assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'}
+                            className="w-full bg-industrial-black text-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
+                          >
+                            {assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'
+                              ? 'Generando...'
+                              : 'GPU directa'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={exportColabPackage}
+                            className="w-full bg-white border border-industrial-black text-industrial-black px-4 py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning transition-colors"
+                          >
+                            Paquete Colab
+                          </button>
+                        </div>
 
                         {assistJobId && (
                           <p className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray break-all">
@@ -1264,24 +1321,31 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                           <div className="grid grid-cols-2 gap-2">
                             <button
                               type="button"
+                              onClick={exportColabPackage}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Paquete Colab
+                            </button>
+                            <button
+                              type="button"
                               onClick={exportActiveSurface}
                               className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
                             >
-                              Exportar JSON
+                              Exportar zona
                             </button>
                             <button
                               type="button"
                               onClick={importActiveSurface}
-                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                              className="col-span-2 bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
                             >
-                              Importar JSON
+                              Importar resultado
                             </button>
                           </div>
                           <textarea
                             value={importJson}
                             onChange={event => setImportJson(event.target.value)}
                             className="min-h-[80px] w-full border border-industrial-gray/20 bg-white px-3 py-2 text-[9px] font-mono outline-none focus:border-industrial-black"
-                            placeholder="Pega aquí una grilla exportada para reemplazar la zona activa..."
+                            placeholder="Pega aquí result.json de Colab, una propuesta, o una zona exportada..."
                           />
                         </div>
                       </details>

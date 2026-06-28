@@ -44,6 +44,45 @@ export type DeformationJobOutput = {
   proposals: DeformationProposal[]
 }
 
+export type CalibrationTransferPackage = {
+  kind: 'texere-calibration-package'
+  version: 1
+  exportId: string
+  generatedAt: string
+  mockup: {
+    id: string
+    name: string
+    view: CalibrationSurface['view']
+    imageUrl: string
+    variantId?: string | null
+    variantColorName?: string | null
+  }
+  product?: {
+    name?: string | null
+    slug?: string | null
+    productType?: string | null
+  }
+  surface: CalibrationSurface & {
+    type: 'mesh'
+    gridSize: DeformationGridSize
+    meshPoints: CalibrationPoint[]
+  }
+  corners: DeformationJobInput['corners']
+  coordinateSpace: DeformationJobInput['coordinateSpace']
+  recommendedOutput: {
+    gridSize: DeformationGridSize
+    proposals: DeformationIntensity[]
+  }
+}
+
+export type CalibrationTransferResult = {
+  kind: 'texere-calibration-result'
+  version: 1
+  sourcePackageId?: string
+  generatedAt: string
+  proposals: DeformationProposal[]
+}
+
 export type DeformationJobStatus =
   | 'IN_QUEUE'
   | 'IN_PROGRESS'
@@ -51,4 +90,3 @@ export type DeformationJobStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'TIMED_OUT'
-
