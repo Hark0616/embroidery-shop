@@ -677,24 +677,29 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   return (
     <div className="space-y-6">
       {/* Stepper */}
-      <section className="grid grid-cols-4 gap-3">
+      <section className="grid grid-cols-4 gap-2">
         {[
-          { step: '1', label: 'Elegir zona', done: Object.keys(surfaces).length > 0, detail: `${Object.keys(surfaces).length} zona(s)` },
-          { step: '2', label: 'Ajustar mesh', done: !!normalizedActive, detail: normalizedActive ? `${normalizedActive.gridSize}×${normalizedActive.gridSize} grid` : '' },
-          { step: '3', label: 'Probar diseño', done: !!previewDesign, detail: previewDesign?.name || '' },
-          { step: '4', label: 'Publicar', done: isPublic, detail: isPublic ? 'Público' : 'Privado' },
-        ].map(({ step, label, done, detail }) => (
-          <div key={step} className={`border p-4 bg-white transition-all ${done ? 'border-industrial-black' : 'border-industrial-gray/20'}`}>
-            <div className="flex items-center gap-3">
-              <span className={`h-7 w-7 flex items-center justify-center border text-[10px] font-bold ${done ? 'bg-industrial-black text-white border-industrial-black' : 'border-industrial-gray/30 text-industrial-gray'}`}>
+          { step: '1', label: 'Zona', tab: 'zones' as const, done: Object.keys(surfaces).length > 0, detail: `${Object.keys(surfaces).length}` },
+          { step: '2', label: 'Mesh', tab: 'mesh' as const, done: !!normalizedActive, detail: normalizedActive ? `${normalizedActive.gridSize}×${normalizedActive.gridSize}` : '' },
+          { step: '3', label: 'Probar', tab: 'preview' as const, done: !!previewDesign, detail: '' },
+          { step: '4', label: 'Publicar', tab: 'preview' as const, done: isPublic, detail: isPublic ? 'ON' : '' },
+        ].map(({ step, label, done, detail, tab }) => (
+          <button
+            key={step}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`border p-2 bg-white transition-all text-left cursor-pointer hover:border-industrial-black ${done ? 'border-industrial-black' : 'border-industrial-gray/20'}`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`h-5 w-5 flex-shrink-0 flex items-center justify-center border text-[9px] font-bold ${done ? 'bg-industrial-black text-white border-industrial-black' : 'border-industrial-gray/30 text-industrial-gray'}`}>
                 {done ? '✓' : step}
               </span>
-              <div>
-                <span className="block font-bold text-xs uppercase tracking-widest">{label}</span>
-                {detail && <span className="block font-mono text-[9px] text-industrial-gray uppercase tracking-widest">{detail}</span>}
+              <div className="min-w-0">
+                <span className="block font-bold text-[10px] uppercase tracking-widest leading-tight">{label}</span>
+                {detail && <span className="block font-mono text-[8px] text-industrial-gray uppercase tracking-widest">{detail}</span>}
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </section>
 
@@ -707,105 +712,69 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
           ? "bg-white border border-industrial-gray/20 p-4 flex flex-col justify-center items-center h-full overflow-hidden" 
           : "bg-white border border-industrial-gray/20 p-4"
         }>
-          <div className="w-full flex items-center justify-between gap-4 mb-4">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {mockup.base_products?.name || 'Prenda'} / {mockup.view}
-                </p>
-                <span className="hidden md:inline font-mono text-[9px] uppercase tracking-widest text-industrial-gray bg-gray-150 border border-industrial-gray/10 px-1.5 py-0.5 rounded">
-                  Atajos: [Ctrl+S] Guardar | [H] Panel | [Shift+Arrastrar] Mover Malla
-                </span>
-              </div>
-              <h2 className="font-heading font-black text-2xl uppercase tracking-tighter">
+          <div className="w-full flex items-center justify-between gap-3 mb-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                {mockup.base_products?.name || 'Prenda'} / {mockup.view}
+              </p>
+              <h2 className="font-heading font-black text-xl uppercase tracking-tighter truncate">
                 {mockup.name}
               </h2>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {/* Status */}
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${isPublic ? 'bg-green-500' : Object.keys(surfaces).length > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                <span className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                  {isPublic ? 'Publicado' : Object.keys(surfaces).length > 0 ? 'Calibrado' : 'Pendiente'}
+                </span>
+              </div>
               {/* Quick Save */}
               <button
                 type="button"
                 onClick={() => save()}
                 disabled={isPending}
-                className="h-8 px-3 flex items-center justify-center border border-industrial-black bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
-                title={isPublic ? 'Guardar cambios del mockup publicado (Ctrl+S)' : 'Guardar calibración privada (Ctrl+S)'}
+                className="h-7 px-3 flex items-center justify-center border border-industrial-black bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
+                title="Guardar (Ctrl+S)"
               >
-                {isPending ? '💾 ...' : isPublic ? '💾 Guardar publicado' : '💾 Guardar privado'}
+                {isPending ? '...' : 'Guardar'}
               </button>
-
-              {/* Undo/Redo */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={history.undo}
-                  disabled={!history.canUndo}
-                  className="h-8 w-8 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
-                  title="Deshacer (Ctrl+Z)"
-                >
-                  ↩
-                </button>
-                <button
-                  type="button"
-                  onClick={history.redo}
-                  disabled={!history.canRedo}
-                  className="h-8 w-8 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
-                  title="Rehacer"
-                >
-                  ↪
-                </button>
-              </div>
-              {/* Status */}
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${isPublic ? 'bg-green-500' : Object.keys(surfaces).length > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
-                <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {isPublic ? 'Publicado' : Object.keys(surfaces).length > 0 ? 'Calibrado' : 'Pendiente'}
-                </span>
-              </div>
             </div>
           </div>
 
           {mockupVariants.length > 1 && (
-            <div className="w-full border border-industrial-gray/10 bg-gray-50 p-3 mb-4">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-2">
-                Visualizar color del mockup
-              </p>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {mockupVariants.map(variant => (
-                  <button
-                    key={variant.id}
-                    type="button"
-                    onClick={() => setPreviewVariantId(variant.id)}
-                    className={`flex-shrink-0 border px-3 py-2 text-left transition-colors ${
-                      previewVariant?.id === variant.id
-                        ? 'border-industrial-black bg-industrial-black text-white'
-                        : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
-                    }`}
-                  >
-                    <span className="block font-bold text-[10px] uppercase tracking-widest">
-                      {variant.colorName || 'Base'}
-                    </span>
-                    <span className="block font-mono text-[9px] uppercase tracking-widest opacity-60 mt-1">
-                      Misma calibracion
-                    </span>
-                  </button>
-                ))}
-              </div>
+            <div className="w-full flex items-center gap-1.5 mb-3 overflow-x-auto">
+              {mockupVariants.map(variant => (
+                <button
+                  key={variant.id}
+                  type="button"
+                  onClick={() => setPreviewVariantId(variant.id)}
+                  className={`flex-shrink-0 border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                    previewVariant?.id === variant.id
+                      ? 'border-industrial-black bg-industrial-black text-white'
+                      : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
+                  }`}
+                >
+                  {variant.colorName || 'Base'}
+                </button>
+              ))}
             </div>
           )}
 
-          {/* Edit mode tabs & Zoom/Fullscreen Controls */}
-          <div className="w-full flex items-center justify-between gap-4 mb-4 flex-wrap">
+          {/* Unified Toolbar */}
+          <div className="w-full flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-1">
+              {/* Edit Modes */}
               {([
                 { mode: 'corners' as EditMode, label: '4 Esquinas', icon: '◇' },
-                { mode: 'grid' as EditMode, label: 'Grid completo', icon: '⊞' },
+                { mode: 'grid' as EditMode, label: 'Grid', icon: '⊞' },
                 { mode: 'preview' as EditMode, label: 'Preview', icon: '◉' },
               ]).map(({ mode, label, icon }) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setEditMode(mode)}
-                  className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                     editMode === mode
                       ? 'bg-industrial-black text-white border-industrial-black'
                       : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
@@ -814,22 +783,45 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                   {icon} {label}
                 </button>
               ))}
+
+              {/* Separator */}
+              <span className="w-px h-5 bg-industrial-gray/15 mx-1" />
+
+              {/* Undo/Redo */}
+              <button
+                type="button"
+                onClick={history.undo}
+                disabled={!history.canUndo}
+                className="h-7 w-7 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
+                title="Deshacer (Ctrl+Z)"
+              >
+                ↩
+              </button>
+              <button
+                type="button"
+                onClick={history.redo}
+                disabled={!history.canRedo}
+                className="h-7 w-7 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
+                title="Rehacer"
+              >
+                ↪
+              </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               {/* Zoom Focus Toggle */}
               {normalizedActive && (
                 <button
                   type="button"
                   onClick={() => setIsZoomed(!isZoomed)}
-                  className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                     isZoomed
                       ? 'bg-blue-600 text-white border-blue-600 animate-pulse'
                       : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
                   }`}
-                  title="Aumentar zoom al área de la zona activa"
+                  title="Zoom a zona activa"
                 >
-                  🔍 {isZoomed ? 'Zoom: Activo (2.2x)' : 'Zoom de Zona'}
+                  {isZoomed ? 'Zoom 2.2x' : 'Zoom'}
                 </button>
               )}
 
@@ -837,28 +829,28 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               <button
                 type="button"
                 onClick={() => setShowSidebar(!showSidebar)}
-                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                   !showSidebar
                     ? 'bg-blue-600 text-white border-blue-600'
                     : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
                 }`}
-                title="Mostrar u ocultar el panel de control lateral (Atajo: H)"
+                title="Panel (H)"
               >
-                📋 {showSidebar ? 'Ocultar Panel' : 'Mostrar Panel'}
+                Panel
               </button>
 
               {/* Fullscreen Toggle */}
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                   isFullscreen
                     ? 'bg-industrial-warning text-industrial-black border-industrial-warning'
                     : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
                 }`}
-                title="Alternar pantalla completa para calibración de alta precisión"
+                title="Pantalla completa"
               >
-                ⛶ {isFullscreen ? 'Salir Pantalla Completa' : 'Pantalla Completa'}
+                Full
               </button>
             </div>
           </div>
@@ -1019,7 +1011,6 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                     : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
                 }`}
               >
-                <span>📍</span>
                 <span>Zonas</span>
               </button>
               <button
@@ -1031,8 +1022,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                     : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
                 }`}
               >
-                <span>⊞</span>
-                <span>Malla (IA)</span>
+                <span>Malla</span>
               </button>
               <button
                 type="button"
@@ -1043,7 +1033,6 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                     : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
                 }`}
               >
-                <span>👁️</span>
                 <span>Probar</span>
               </button>
             </div>
@@ -1053,14 +1042,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               {/* Tab 1: Zonas */}
               {activeTab === 'zones' && (
                 <div className="space-y-4 animate-fade-in">
-                  <div>
-                    <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
-                      Zonas bordables
-                    </h3>
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                      Elige una zona existente o crea una nueva para el mockup.
-                    </p>
-                  </div>
+                  <h3 className="font-heading font-black text-base uppercase tracking-tighter">
+                    Zonas bordables
+                  </h3>
 
                   <div className="grid grid-cols-2 gap-2">
                     {presetSurfaces.map(preset => (
@@ -1095,10 +1079,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                     </button>
                   </div>
 
-                  <div className="space-y-2 border-t border-industrial-gray/10 pt-4">
-                    <span className="block font-bold text-[10px] uppercase tracking-widest mb-2 text-industrial-gray">
-                      Zonas configuradas:
-                    </span>
+                  <div className="space-y-2 border-t border-industrial-gray/10 pt-3">
                     {Object.values(surfaces).map(surface => (
                       <button
                         key={surface.id}
@@ -1154,9 +1135,6 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                             <h4 className="font-heading font-black text-sm uppercase tracking-tighter">
                               Asistir deformación
                             </h4>
-                            <p className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-0.5">
-                              Usa las 4 esquinas fijas y genera una malla que siga la tela.
-                            </p>
                           </div>
                           <span className={`px-2 py-0.5 border text-[9px] font-bold uppercase tracking-widest ${
                             assistStatus === 'ready'
@@ -1291,7 +1269,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                       {/* Import/Export advanced (Details) */}
                       <details className="group border border-industrial-gray/20 mt-4 bg-white">
                         <summary className="flex justify-between items-center p-3 cursor-pointer select-none font-mono text-[9px] uppercase tracking-widest hover:bg-gray-50">
-                          <span>⚙️ JSON Avanzado (Importar/Exportar)</span>
+                          <span>JSON Avanzado (Importar/Exportar)</span>
                           <span className="transition-transform group-open:rotate-180 text-[8px]">▼</span>
                         </summary>
                         <div className="p-3 border-t border-industrial-gray/10 bg-gray-50 space-y-3">
@@ -1329,9 +1307,6 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 <div className="space-y-4 animate-fade-in">
                   {/* Test Design Selection */}
                   <section className="space-y-3">
-                    <h4 className="font-heading font-black text-sm uppercase tracking-tighter pb-1 border-b border-industrial-gray/10">
-                      Visualizar y probar
-                    </h4>
                     <label className="block">
                       <span className="block font-bold text-xs uppercase tracking-widest mb-1.5">Diseño de prueba</span>
                       <select
