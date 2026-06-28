@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
 import { uploadImage } from './storage'
 import type { CalibrationSurface, MockupVariant } from '@/lib/types/database'
+import { validateSurfaceMap } from '@/lib/deformation/surface-validation'
 
 type MockupStatus = 'draft' | 'needs_calibration' | 'calibrated' | 'published'
 
@@ -179,6 +180,13 @@ export async function updateMockupCalibration({
   const hasSurfaces = Object.keys(surfaces).length > 0
   if ((status === 'calibrated' || status === 'published' || isPublic) && !hasSurfaces) {
     throw new Error('A mockup needs at least one calibrated surface before publishing')
+  }
+
+  if (hasSurfaces) {
+    const validation = validateSurfaceMap(surfaces)
+    if (!validation.ok) {
+      throw new Error(`Mockup calibration is invalid: ${validation.errors.join('; ')}`)
+    }
   }
 
   const nextStatus: MockupStatus = isPublic ? 'published' : status

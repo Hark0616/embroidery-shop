@@ -6,6 +6,7 @@ import { updateMockupCalibration } from '@/lib/actions/mockups'
 import type { CalibrationPoint, CalibrationSurface, EmbroideryDesign, GarmentMockup } from '@/lib/types/database'
 import MeshWarpOverlay from '@/components/studio/MeshWarpOverlay'
 import {
+  createUniformGrid,
   createMeshSurface,
   getCornerIndices,
   getPointRole,
@@ -14,9 +15,17 @@ import {
   reinterpolateFromCorners,
 } from '@/lib/mesh-utils'
 import { getMockupVariants } from '@/lib/mockup-variants'
+import { validateSurface } from '@/lib/deformation/surface-validation'
+import type { DeformationProposal } from '@/lib/deformation/types'
+import {
+  assertValidImportedProposals,
+  buildCalibrationTransferPackage,
+  extractDeformationProposalsFromImport,
+} from '@/lib/deformation/transfer'
 
 type SurfaceMap = Record<string, CalibrationSurface>
 type EditMode = 'corners' | 'grid' | 'preview'
+type AssistStatus = 'idle' | 'preparing' | 'queued' | 'analyzing' | 'ready' | 'error'
 
 const DEFAULT_GRID_SIZE = 5
 
@@ -31,6 +40,15 @@ const BLEND_OPTIONS: Array<{ value: CalibrationSurface['blendMode']; label: stri
   { value: 'overlay', label: 'Overlay' },
   { value: 'normal', label: 'Normal' },
 ]
+
+const ASSIST_STATUS_LABELS: Record<AssistStatus, string> = {
+  idle: 'Sin iniciar',
+  preparing: 'Preparando',
+  queued: 'En cola',
+  analyzing: 'Analizando',
+  ready: 'Listo',
+  error: 'Error',
+}
 
 const SIZE_LABELS: Record<string, string> = {
   small: 'Pequeño',
@@ -80,6 +98,32 @@ function normalizeId(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function downloadJsonFile(payload: unknown, fileName: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function fileSafe(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'mockup'
 }
 
 // ─── Undo/Redo ─────────────────────────────────────────────────
@@ -162,8 +206,32 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(true)
   const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 })
+  const [assistStatus, setAssistStatus] = useState<AssistStatus>('idle')
+  const [assistMessage, setAssistMessage] = useState('')
+  const [assistJobId, setAssistJobId] = useState('')
+  const [assistProposals, setAssistProposals] = useState<DeformationProposal[]>([])
+  const [importJson, setImportJson] = useState('')
+  const [importMessage, setImportMessage] = useState('')
+  const [activeTab, setActiveTab] = useState<'zones' | 'mesh' | 'preview'>('zones')
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
+  const importFileInputRef = useRef<HTMLInputElement>(null)
+  const leftSectionRef = useRef<HTMLElement>(null)
+  const [leftHeight, setLeftHeight] = useState<number | null>(null)
+
+  useEffect(() => {
+    const element = leftSectionRef.current
+    if (!element) return
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setLeftHeight(entry.target.getBoundingClientRect().height)
+      }
+    })
+
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   const previewVariant = useMemo(
     () => mockupVariants.find(variant => variant.id === previewVariantId) || mockupVariants[0],
@@ -290,6 +358,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     updateState({ ...surfaces, [uniqueId]: next }, uniqueId)
     setDraftLabel('')
     setEditMode('corners')
+    setActiveTab('mesh')
   }
 
   const deleteSurface = (id: string) => {
@@ -297,6 +366,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     delete next[id]
     const newActive = activeId === id ? (Object.keys(next)[0] || '') : activeId
     updateState(next, newActive)
+    if (Object.keys(next).length === 0) {
+      setActiveTab('zones')
+    }
   }
 
   const setActiveId = (id: string) => {
@@ -405,7 +477,6 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     const bl = normalizedActive.meshPoints[corners[2]]
     const br = normalizedActive.meshPoints[corners[3]]
 
-    const { createUniformGrid } = require('@/lib/mesh-utils')
     const newMeshPoints = createUniformGrid(tl, tr, bl, br, newSize)
 
     updateState({
@@ -446,6 +517,210 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
   const handlePointerUp = () => {
     setDragPointIndex(null)
+  }
+
+  // ─── Assisted deformation ─────────────────────────────────────
+
+  const requestDeformationAssistance = async () => {
+    if (!normalizedActive) return
+
+    setAssistStatus('preparing')
+    setAssistMessage('Preparando imagen y esquinas de la zona...')
+    setAssistProposals([])
+    setAssistJobId('')
+
+    try {
+      const startResponse = await fetch(`/api/admin/mockups/${mockup.id}/deformation-jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          surface: normalizedActive,
+          variantId: previewVariant?.id || null,
+        }),
+      })
+      const startPayload = await startResponse.json()
+
+      if (!startResponse.ok) {
+        throw new Error(startPayload.error || 'No se pudo iniciar la asistencia.')
+      }
+
+      const jobId = startPayload.jobId as string
+      setAssistJobId(jobId)
+      setAssistStatus('queued')
+      setAssistMessage('Job enviado a GPU. Esperando turno...')
+
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        await sleep(2000)
+        const statusResponse = await fetch(`/api/admin/mockups/${mockup.id}/deformation-jobs/${jobId}`, {
+          cache: 'no-store',
+        })
+        const statusPayload = await statusResponse.json()
+
+        if (!statusResponse.ok) {
+          throw new Error(statusPayload.error || 'No se pudo leer el estado del worker.')
+        }
+
+        if (statusPayload.status === 'FAILED' || statusPayload.status === 'CANCELLED' || statusPayload.status === 'TIMED_OUT') {
+          throw new Error(statusPayload.error || `El worker terminó con estado ${statusPayload.status}.`)
+        }
+
+        if (statusPayload.status === 'COMPLETED') {
+          const proposals = statusPayload.output?.proposals || []
+          if (!Array.isArray(proposals) || proposals.length === 0) {
+            throw new Error('El worker no devolvió propuestas de malla.')
+          }
+          setAssistProposals(proposals)
+          setAssistStatus('ready')
+          setAssistMessage('Listo. Revisa las propuestas y aplica la que mejor siga la prenda.')
+          return
+        }
+
+        setAssistStatus('analyzing')
+        setAssistMessage(statusPayload.status === 'IN_QUEUE'
+          ? 'GPU en cola. Mantén esta pantalla abierta.'
+          : 'Analizando textura, relieve y curvatura de la zona...')
+      }
+
+      throw new Error('La asistencia tardó demasiado. Intenta de nuevo o usa el modo manual.')
+    } catch (error) {
+      setAssistStatus('error')
+      setAssistMessage(error instanceof Error ? error.message : 'No se pudo completar la asistencia.')
+    }
+  }
+
+  const applyDeformationProposal = (proposal: DeformationProposal) => {
+    if (!normalizedActive || !activeId) return
+    const validation = validateSurface({
+      ...normalizedActive,
+      gridSize: proposal.gridSize,
+      meshPoints: proposal.meshPoints,
+    })
+
+    if (!validation.ok) {
+      setAssistStatus('error')
+      setAssistMessage(`La propuesta no es válida: ${validation.errors.join('; ')}`)
+      return
+    }
+
+    const cornerSet = new Set(getCornerIndices(proposal.gridSize) as unknown as number[])
+    const pinnedPoints = proposal.meshPoints
+      .map((_, index) => index)
+      .filter(index => !cornerSet.has(index))
+
+    updateState({
+      ...surfaces,
+      [activeId]: {
+        ...normalizedActive,
+        gridSize: proposal.gridSize,
+        meshPoints: proposal.meshPoints.map(point => ({
+          x: Number(point.x.toFixed(1)),
+          y: Number(point.y.toFixed(1)),
+        })),
+        pinnedPoints,
+        assistSource: proposal.source,
+        assistVersion: proposal.workerVersion,
+        assistConfidence: proposal.confidence,
+        assistWarnings: proposal.warnings,
+        generatedAt: new Date().toISOString(),
+      },
+    })
+    setEditMode('preview')
+    setAssistStatus('ready')
+    setAssistMessage(`Propuesta "${proposal.label}" aplicada. Revisa el preview antes de publicar.`)
+  }
+
+  const exportActiveSurface = async () => {
+    if (!normalizedActive) return
+    const payload = JSON.stringify(normalizedActive, null, 2)
+    try {
+      await navigator.clipboard.writeText(payload)
+      setAssistMessage('JSON copiado al portapapeles.')
+    } catch {
+      setImportJson(payload)
+      setAssistMessage('No se pudo copiar; dejé el JSON en el campo de importación.')
+    }
+  }
+
+  const exportColabPackage = () => {
+    if (!normalizedActive) return
+
+    const payload = buildCalibrationTransferPackage({
+      mockup: {
+        id: mockup.id,
+        name: mockup.name,
+        view: mockup.view,
+        imageUrl: previewMockupImage,
+        variantId: previewVariant?.id || null,
+        variantColorName: previewVariant?.colorName || null,
+      },
+      product: {
+        name: mockup.base_products?.name || null,
+        slug: mockup.base_products?.slug || null,
+        productType: mockup.base_products?.product_type || null,
+      },
+      surface: normalizedActive,
+    })
+
+    downloadJsonFile(
+      payload,
+      `texere-colab-${fileSafe(mockup.name)}-${fileSafe(normalizedActive.id)}.json`,
+    )
+    setAssistStatus('ready')
+    setAssistMessage('Paquete Colab descargado. En Colab usa %run -i, grid 7x7 y modo tela con bordes bloqueados; luego importa el result.json aquí.')
+  }
+
+  const importJsonText = (rawText: string) => {
+    if (!normalizedActive || !activeId) {
+      setImportMessage('Selecciona una zona antes de importar.')
+      return
+    }
+
+    if (!rawText.trim()) {
+      setImportMessage('Pega un JSON o sube un archivo result.json.')
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(rawText)
+      const proposals = extractDeformationProposalsFromImport(parsed)
+      assertValidImportedProposals(proposals)
+      setImportJson(rawText)
+
+      if (proposals.length === 1) {
+        applyDeformationProposal(proposals[0])
+        setImportMessage('Resultado importado y aplicado en la zona activa.')
+        setAssistMessage('Resultado importado y aplicado en la zona activa.')
+        return
+      }
+
+      setAssistProposals(proposals)
+      setAssistStatus('ready')
+      setImportMessage(`Resultado importado: ${proposals.length} propuestas cargadas. Elige una arriba para aplicarla.`)
+      setAssistMessage('Resultado importado. Elige una propuesta en "Propuestas encontradas".')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'JSON inválido.'
+      setAssistStatus('error')
+      setImportMessage(message)
+      setAssistMessage(message)
+    }
+  }
+
+  const importActiveSurface = () => {
+    importJsonText(importJson)
+  }
+
+  const importResultFile = async (file: File | null) => {
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      importJsonText(text)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo leer el archivo.'
+      setImportMessage(message)
+      setAssistMessage(message)
+      setAssistStatus('error')
+    }
   }
 
   // ─── Save ────────────────────────────────────────────────────
@@ -499,24 +774,29 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   return (
     <div className="space-y-6">
       {/* Stepper */}
-      <section className="grid grid-cols-4 gap-3">
+      <section className="grid grid-cols-4 gap-2">
         {[
-          { step: '1', label: 'Elegir zona', done: Object.keys(surfaces).length > 0, detail: `${Object.keys(surfaces).length} zona(s)` },
-          { step: '2', label: 'Ajustar mesh', done: !!normalizedActive, detail: normalizedActive ? `${normalizedActive.gridSize}×${normalizedActive.gridSize} grid` : '' },
-          { step: '3', label: 'Probar diseño', done: !!previewDesign, detail: previewDesign?.name || '' },
-          { step: '4', label: 'Publicar', done: isPublic, detail: isPublic ? 'Público' : 'Privado' },
-        ].map(({ step, label, done, detail }) => (
-          <div key={step} className={`border p-4 bg-white transition-all ${done ? 'border-industrial-black' : 'border-industrial-gray/20'}`}>
-            <div className="flex items-center gap-3">
-              <span className={`h-7 w-7 flex items-center justify-center border text-[10px] font-bold ${done ? 'bg-industrial-black text-white border-industrial-black' : 'border-industrial-gray/30 text-industrial-gray'}`}>
+          { step: '1', label: 'Zona', tab: 'zones' as const, done: Object.keys(surfaces).length > 0, detail: `${Object.keys(surfaces).length}` },
+          { step: '2', label: 'Mesh', tab: 'mesh' as const, done: !!normalizedActive, detail: normalizedActive ? `${normalizedActive.gridSize}×${normalizedActive.gridSize}` : '' },
+          { step: '3', label: 'Probar', tab: 'preview' as const, done: !!previewDesign, detail: '' },
+          { step: '4', label: 'Publicar', tab: 'preview' as const, done: isPublic, detail: isPublic ? 'ON' : '' },
+        ].map(({ step, label, done, detail, tab }) => (
+          <button
+            key={step}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`border p-2 bg-white transition-all text-left cursor-pointer hover:border-industrial-black ${done ? 'border-industrial-black' : 'border-industrial-gray/20'}`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`h-5 w-5 flex-shrink-0 flex items-center justify-center border text-[9px] font-bold ${done ? 'bg-industrial-black text-white border-industrial-black' : 'border-industrial-gray/30 text-industrial-gray'}`}>
                 {done ? '✓' : step}
               </span>
-              <div>
-                <span className="block font-bold text-xs uppercase tracking-widest">{label}</span>
-                {detail && <span className="block font-mono text-[9px] text-industrial-gray uppercase tracking-widest">{detail}</span>}
+              <div className="min-w-0">
+                <span className="block font-bold text-[10px] uppercase tracking-widest leading-tight">{label}</span>
+                {detail && <span className="block font-mono text-[8px] text-industrial-gray uppercase tracking-widest">{detail}</span>}
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </section>
 
@@ -525,109 +805,76 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
         : `grid ${showSidebar ? 'grid-cols-[minmax(0,1.35fr)_minmax(400px,0.65fr)]' : 'grid-cols-1'} gap-6`
       }>
         {/* Left: Image + Overlay */}
-        <section className={isFullscreen 
-          ? "bg-white border border-industrial-gray/20 p-4 flex flex-col justify-center items-center h-full overflow-hidden" 
-          : "bg-white border border-industrial-gray/20 p-4"
-        }>
-          <div className="w-full flex items-center justify-between gap-4 mb-4">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {mockup.base_products?.name || 'Prenda'} / {mockup.view}
-                </p>
-                <span className="hidden md:inline font-mono text-[9px] uppercase tracking-widest text-industrial-gray bg-gray-150 border border-industrial-gray/10 px-1.5 py-0.5 rounded">
-                  Atajos: [Ctrl+S] Guardar | [H] Panel | [Shift+Arrastrar] Mover Malla
-                </span>
-              </div>
-              <h2 className="font-heading font-black text-2xl uppercase tracking-tighter">
+        <section 
+          ref={leftSectionRef}
+          className={isFullscreen 
+            ? "bg-white border border-industrial-gray/20 p-4 flex flex-col justify-center items-center h-full overflow-hidden" 
+            : "bg-white border border-industrial-gray/20 p-4"
+          }
+        >
+          <div className="w-full flex items-center justify-between gap-3 mb-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                {mockup.base_products?.name || 'Prenda'} / {mockup.view}
+              </p>
+              <h2 className="font-heading font-black text-xl uppercase tracking-tighter truncate">
                 {mockup.name}
               </h2>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {/* Status */}
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${isPublic ? 'bg-green-500' : Object.keys(surfaces).length > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                <span className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                  {isPublic ? 'Publicado' : Object.keys(surfaces).length > 0 ? 'Calibrado' : 'Pendiente'}
+                </span>
+              </div>
               {/* Quick Save */}
               <button
                 type="button"
                 onClick={() => save()}
                 disabled={isPending}
-                className="h-8 px-3 flex items-center justify-center border border-industrial-black bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
-                title={isPublic ? 'Guardar cambios del mockup publicado (Ctrl+S)' : 'Guardar calibración privada (Ctrl+S)'}
+                className="h-7 px-3 flex items-center justify-center border border-industrial-black bg-industrial-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
+                title="Guardar (Ctrl+S)"
               >
-                {isPending ? '💾 ...' : isPublic ? '💾 Guardar publicado' : '💾 Guardar privado'}
+                {isPending ? '...' : 'Guardar'}
               </button>
-
-              {/* Undo/Redo */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={history.undo}
-                  disabled={!history.canUndo}
-                  className="h-8 w-8 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
-                  title="Deshacer (Ctrl+Z)"
-                >
-                  ↩
-                </button>
-                <button
-                  type="button"
-                  onClick={history.redo}
-                  disabled={!history.canRedo}
-                  className="h-8 w-8 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
-                  title="Rehacer"
-                >
-                  ↪
-                </button>
-              </div>
-              {/* Status */}
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${isPublic ? 'bg-green-500' : Object.keys(surfaces).length > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
-                <span className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {isPublic ? 'Publicado' : Object.keys(surfaces).length > 0 ? 'Calibrado' : 'Pendiente'}
-                </span>
-              </div>
             </div>
           </div>
 
           {mockupVariants.length > 1 && (
-            <div className="w-full border border-industrial-gray/10 bg-gray-50 p-3 mb-4">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-2">
-                Visualizar color del mockup
-              </p>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {mockupVariants.map(variant => (
-                  <button
-                    key={variant.id}
-                    type="button"
-                    onClick={() => setPreviewVariantId(variant.id)}
-                    className={`flex-shrink-0 border px-3 py-2 text-left transition-colors ${
-                      previewVariant?.id === variant.id
-                        ? 'border-industrial-black bg-industrial-black text-white'
-                        : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
-                    }`}
-                  >
-                    <span className="block font-bold text-[10px] uppercase tracking-widest">
-                      {variant.colorName || 'Base'}
-                    </span>
-                    <span className="block font-mono text-[9px] uppercase tracking-widest opacity-60 mt-1">
-                      Misma calibracion
-                    </span>
-                  </button>
-                ))}
-              </div>
+            <div className="w-full flex items-center gap-1.5 mb-3 overflow-x-auto">
+              {mockupVariants.map(variant => (
+                <button
+                  key={variant.id}
+                  type="button"
+                  onClick={() => setPreviewVariantId(variant.id)}
+                  className={`flex-shrink-0 border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                    previewVariant?.id === variant.id
+                      ? 'border-industrial-black bg-industrial-black text-white'
+                      : 'border-industrial-gray/20 bg-white hover:border-industrial-gray text-industrial-black'
+                  }`}
+                >
+                  {variant.colorName || 'Base'}
+                </button>
+              ))}
             </div>
           )}
 
-          {/* Edit mode tabs & Zoom/Fullscreen Controls */}
-          <div className="w-full flex items-center justify-between gap-4 mb-4 flex-wrap">
+          {/* Unified Toolbar */}
+          <div className="w-full flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-1">
+              {/* Edit Modes */}
               {([
                 { mode: 'corners' as EditMode, label: '4 Esquinas', icon: '◇' },
-                { mode: 'grid' as EditMode, label: 'Grid completo', icon: '⊞' },
+                { mode: 'grid' as EditMode, label: 'Grid', icon: '⊞' },
                 { mode: 'preview' as EditMode, label: 'Preview', icon: '◉' },
               ]).map(({ mode, label, icon }) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setEditMode(mode)}
-                  className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                     editMode === mode
                       ? 'bg-industrial-black text-white border-industrial-black'
                       : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
@@ -636,22 +883,45 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                   {icon} {label}
                 </button>
               ))}
+
+              {/* Separator */}
+              <span className="w-px h-5 bg-industrial-gray/15 mx-1" />
+
+              {/* Undo/Redo */}
+              <button
+                type="button"
+                onClick={history.undo}
+                disabled={!history.canUndo}
+                className="h-7 w-7 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
+                title="Deshacer (Ctrl+Z)"
+              >
+                ↩
+              </button>
+              <button
+                type="button"
+                onClick={history.redo}
+                disabled={!history.canRedo}
+                className="h-7 w-7 flex items-center justify-center border border-industrial-gray/20 text-xs hover:bg-gray-50 disabled:opacity-30"
+                title="Rehacer"
+              >
+                ↪
+              </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               {/* Zoom Focus Toggle */}
               {normalizedActive && (
                 <button
                   type="button"
                   onClick={() => setIsZoomed(!isZoomed)}
-                  className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                     isZoomed
                       ? 'bg-blue-600 text-white border-blue-600 animate-pulse'
                       : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
                   }`}
-                  title="Aumentar zoom al área de la zona activa"
+                  title="Zoom a zona activa"
                 >
-                  🔍 {isZoomed ? 'Zoom: Activo (2.2x)' : 'Zoom de Zona'}
+                  {isZoomed ? 'Zoom 2.2x' : 'Zoom'}
                 </button>
               )}
 
@@ -659,28 +929,28 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
               <button
                 type="button"
                 onClick={() => setShowSidebar(!showSidebar)}
-                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                   !showSidebar
                     ? 'bg-blue-600 text-white border-blue-600'
                     : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
                 }`}
-                title="Mostrar u ocultar el panel de control lateral (Atajo: H)"
+                title="Panel (H)"
               >
-                📋 {showSidebar ? 'Ocultar Panel' : 'Mostrar Panel'}
+                Panel
               </button>
 
               {/* Fullscreen Toggle */}
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border transition-all ${
                   isFullscreen
                     ? 'bg-industrial-warning text-industrial-black border-industrial-warning'
                     : 'bg-white text-industrial-gray border-industrial-gray/20 hover:border-industrial-black hover:text-industrial-black'
                 }`}
-                title="Alternar pantalla completa para calibración de alta precisión"
+                title="Pantalla completa"
               >
-                ⛶ {isFullscreen ? 'Salir Pantalla Completa' : 'Pantalla Completa'}
+                Full
               </button>
             </div>
           </div>
@@ -741,7 +1011,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
               {/* Grid lines visualization */}
               {normalizedActive && editMode !== 'preview' && (
-                <svg className="absolute inset-0 z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <svg className="absolute inset-0 w-full h-full z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                   {/* Draw grid lines */}
                   {Array.from({ length: normalizedActive.gridSize }).map((_, row) => (
                     Array.from({ length: normalizedActive.gridSize - 1 }).map((_, col) => {
@@ -792,7 +1062,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                 const corners = getCornerIndices(norm.gridSize)
                 const pts = corners.map(i => norm.meshPoints[i])
                 return (
-                  <svg key={surface.id} className="absolute inset-0 z-10 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <svg key={surface.id} className="absolute inset-0 w-full h-full z-10 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                     <polygon
                       points={pts.map(p => `${p.x},${p.y}`).join(' ')}
                       fill="rgba(10,10,10,0.06)"
@@ -829,268 +1099,492 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
         {/* Right: Controls */}
         {showSidebar && (
-          <aside className="space-y-4 overflow-y-auto" style={{ maxHeight: isFullscreen ? 'calc(100vh - 4rem)' : 'calc(100vh - 8rem)' }}>
-            {/* Zones panel */}
-            <section className="bg-white border border-industrial-gray/20 p-5">
-            <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
-              Zonas bordables
-            </h3>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-4">
-              Elige una zona y ajusta el mesh sobre el mockup.
-            </p>
-
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              {presetSurfaces.map(preset => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => addSurface(preset.label, preset.size, preset.id)}
-                  className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
-                >
-                  <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
-                  <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-1">
-                    {SIZE_LABELS[preset.size]}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-2 mb-4 border-t border-industrial-gray/10 pt-4">
-              <input
-                type="text"
-                value={draftLabel}
-                onChange={e => setDraftLabel(e.target.value)}
-                className="min-w-0 flex-1 border border-industrial-gray/20 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
-                placeholder="Nombre de zona..."
-              />
+          <aside 
+            className="flex flex-col bg-white border border-industrial-gray/20 shadow-sm" 
+            style={{ 
+              height: isFullscreen ? 'calc(100vh - 4.5rem)' : leftHeight ? `${leftHeight}px` : '720px', 
+              maxHeight: isFullscreen ? 'calc(100vh - 4.5rem)' : leftHeight ? `${leftHeight}px` : '100%' 
+            }}
+          >
+            {/* Tabs Header */}
+            <div className="grid grid-cols-3 border-b border-industrial-gray/20 bg-gray-50 font-mono text-[9px] md:text-[10px] font-bold uppercase tracking-widest">
               <button
                 type="button"
-                onClick={() => addSurface()}
-                className="bg-industrial-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                onClick={() => setActiveTab('zones')}
+                className={`py-3 text-center border-r border-industrial-gray/10 transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+                  activeTab === 'zones'
+                    ? 'bg-white border-b-2 border-b-industrial-warning text-industrial-black font-black'
+                    : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
+                }`}
               >
-                Agregar
+                <span>Zonas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('mesh')}
+                className={`py-3 text-center border-r border-industrial-gray/10 transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+                  activeTab === 'mesh'
+                    ? 'bg-white border-b-2 border-b-industrial-warning text-industrial-black font-black'
+                    : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
+                }`}
+              >
+                <span>Malla</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('preview')}
+                className={`py-3 text-center transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+                  activeTab === 'preview'
+                    ? 'bg-white border-b-2 border-b-industrial-warning text-industrial-black font-black'
+                    : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
+                }`}
+              >
+                <span>Probar</span>
               </button>
             </div>
 
-            <div className="space-y-2">
-              {Object.values(surfaces).map(surface => (
-                <button
-                  key={surface.id}
-                  type="button"
-                  onClick={() => setActiveId(surface.id)}
-                  className={`w-full text-left border p-3 transition-colors ${surface.id === activeId ? 'border-industrial-black bg-gray-50' : 'border-industrial-gray/20 hover:border-industrial-gray/50'}`}
-                >
-                  <span className="block font-bold text-xs uppercase tracking-widest">{surface.label}</span>
-                  <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                    {surface.size} / {surface.view} / {(surface as any).gridSize || 2}×{(surface as any).gridSize || 2} mesh
-                  </span>
-                </button>
-              ))}
-              {Object.keys(surfaces).length === 0 && (
-                <div className="border border-dashed border-industrial-gray/20 p-5 text-center font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  Aún no hay zonas calibradas.
+            {/* Scrollable Content Container */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Tab 1: Zonas */}
+              {activeTab === 'zones' && (
+                <div className="space-y-4 animate-fade-in">
+                  <h3 className="font-heading font-black text-base uppercase tracking-tighter">
+                    Zonas bordables
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {presetSurfaces.map(preset => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => addSurface(preset.label, preset.size, preset.id)}
+                        className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                      >
+                        <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
+                        <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-1">
+                          {SIZE_LABELS[preset.size]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2 border-t border-industrial-gray/10 pt-4">
+                    <input
+                      type="text"
+                      value={draftLabel}
+                      onChange={e => setDraftLabel(e.target.value)}
+                      className="min-w-0 flex-1 border border-industrial-gray/20 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                      placeholder="Nombre de zona..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addSurface()}
+                      className="bg-industrial-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                    >
+                      Agregar
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 border-t border-industrial-gray/10 pt-3">
+                    {Object.values(surfaces).map(surface => (
+                      <button
+                        key={surface.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveId(surface.id)
+                          setActiveTab('mesh')
+                        }}
+                        className={`w-full text-left border p-3 transition-colors ${
+                          surface.id === activeId ? 'border-industrial-black bg-gray-50' : 'border-industrial-gray/20 hover:border-industrial-gray/50'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="block font-bold text-xs uppercase tracking-widest">{surface.label}</span>
+                          {surface.id === activeId && <span className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Activa →</span>}
+                        </div>
+                        <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray mt-1">
+                          {surface.size} / {surface.view} / {(surface as any).gridSize || 2}×{(surface as any).gridSize || 2} mesh
+                        </span>
+                      </button>
+                    ))}
+                    {Object.keys(surfaces).length === 0 && (
+                      <div className="border border-dashed border-industrial-gray/20 p-5 text-center font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                        Aún no hay zonas creadas. Usa los presets de arriba para empezar.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Malla (IA y Ajustes de red) */}
+              {activeTab === 'mesh' && (
+                <div className="space-y-4 animate-fade-in">
+                  {!normalizedActive ? (
+                    <div className="border border-dashed border-industrial-gray/20 p-8 text-center space-y-4">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-industrial-gray">
+                        No hay ninguna zona seleccionada.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('zones')}
+                        className="bg-industrial-black text-white px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                      >
+                        ← Seleccionar o Crear Zona
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Assist deformation (IA) */}
+                      <section className="space-y-4 border border-industrial-gray/10 p-4 bg-gray-50">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <h4 className="font-heading font-black text-sm uppercase tracking-tighter">
+                              Asistir deformación
+                            </h4>
+                          </div>
+                          <span className={`px-2 py-0.5 border text-[9px] font-bold uppercase tracking-widest ${
+                            assistStatus === 'ready'
+                              ? 'border-green-500 text-green-700 bg-green-50'
+                              : assistStatus === 'error'
+                                ? 'border-red-300 text-red-700 bg-red-50'
+                                : assistStatus === 'idle'
+                                  ? 'border-industrial-gray/20 text-industrial-gray'
+                                  : 'border-industrial-warning text-industrial-black bg-industrial-warning/10'
+                          }`}>
+                            {ASSIST_STATUS_LABELS[assistStatus]}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={requestDeformationAssistance}
+                            disabled={assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'}
+                            className="w-full bg-industrial-black text-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
+                          >
+                            {assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'
+                              ? 'Generando...'
+                              : 'GPU directa'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={exportColabPackage}
+                            className="w-full bg-white border border-industrial-black text-industrial-black px-4 py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning transition-colors"
+                          >
+                            Paquete Colab
+                          </button>
+                        </div>
+
+                        {assistJobId && (
+                          <p className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray break-all">
+                            Job GPU: {assistJobId}
+                          </p>
+                        )}
+
+                        {assistMessage && (
+                          <p className={`font-mono text-[10px] uppercase tracking-widest ${
+                            assistStatus === 'error' ? 'text-red-600' : 'text-industrial-gray'
+                          }`}>
+                            {assistMessage}
+                          </p>
+                        )}
+
+                        {assistProposals.length > 0 && (
+                          <div className="space-y-2 border-t border-industrial-gray/10 pt-3">
+                            <span className="block font-bold text-[9px] uppercase tracking-widest text-industrial-gray">Propuestas encontradas:</span>
+                            {assistProposals.map(proposal => (
+                              <button
+                                key={proposal.id}
+                                type="button"
+                                onClick={() => applyDeformationProposal(proposal)}
+                                className="w-full border border-industrial-gray/20 p-2.5 text-left bg-white hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                              >
+                                <span className="flex items-center justify-between gap-3">
+                                  <span className="font-bold text-[10px] uppercase tracking-widest">{proposal.label}</span>
+                                  <span className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                                    {proposal.gridSize}×{proposal.gridSize} / {Math.round(proposal.confidence * 100)}%
+                                  </span>
+                                </span>
+                                {proposal.warnings.length > 0 && (
+                                  <span className="block mt-1.5 font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                                    {proposal.warnings.join(' · ')}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+
+                      {/* Mesh Settings */}
+                      <section className="space-y-4">
+                        <div className="flex items-center justify-between border-b border-industrial-gray/10 pb-2">
+                          <span className="font-heading font-black text-sm uppercase tracking-tighter">
+                            Configuración de malla
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`¿Seguro que deseas eliminar la zona "${normalizedActive.label}"?`)) {
+                                deleteSurface(normalizedActive.id)
+                              }
+                            }}
+                            className="text-red-600 text-[10px] font-bold uppercase tracking-widest hover:underline"
+                          >
+                            Eliminar zona
+                          </button>
+                        </div>
+
+                        {/* Grid Resolution */}
+                        <div>
+                          <span className="block font-bold text-xs uppercase tracking-widest mb-2">Resolución del mesh</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {GRID_SIZE_OPTIONS.map(opt => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => handleGridSizeChange(opt.value)}
+                                className={`border p-2 text-center transition-colors ${
+                                  normalizedActive.gridSize === opt.value
+                                    ? 'border-industrial-black bg-industrial-black text-white'
+                                    : 'border-industrial-gray/20 hover:border-industrial-black bg-white text-industrial-black'
+                                }`}
+                              >
+                                <span className="block font-bold text-xs">{opt.label}</span>
+                                <span className="block font-mono text-[8px] uppercase tracking-widest text-current opacity-60 mt-0.5">{opt.description}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+
+
+                        {/* Reset grid */}
+                        <button
+                          type="button"
+                          onClick={handleResetGrid}
+                          className="w-full border border-industrial-gray/20 bg-white px-3 py-2.5 text-center font-bold text-[10px] uppercase tracking-widest hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                        >
+                          ↺ Resetear grid (re-interpolar)
+                        </button>
+                      </section>
+
+                      {/* Import/Export advanced (Details) */}
+                      <details className="group border border-industrial-gray/20 mt-4 bg-white">
+                        <summary className="flex justify-between items-center p-3 cursor-pointer select-none font-mono text-[9px] uppercase tracking-widest hover:bg-gray-50">
+                          <span>JSON Avanzado (Importar/Exportar)</span>
+                          <span className="transition-transform group-open:rotate-180 text-[8px]">▼</span>
+                        </summary>
+                        <div className="p-3 border-t border-industrial-gray/10 bg-gray-50 space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              ref={importFileInputRef}
+                              type="file"
+                              accept="application/json,.json"
+                              className="hidden"
+                              onChange={event => {
+                                importResultFile(event.target.files?.[0] || null)
+                                event.currentTarget.value = ''
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={exportColabPackage}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Paquete Colab
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => importFileInputRef.current?.click()}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Subir result.json
+                            </button>
+                            <button
+                              type="button"
+                              onClick={exportActiveSurface}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Exportar zona
+                            </button>
+                            <button
+                              type="button"
+                              onClick={importActiveSurface}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Importar texto
+                            </button>
+                          </div>
+                          <textarea
+                            value={importJson}
+                            onChange={event => setImportJson(event.target.value)}
+                            className="min-h-[80px] w-full border border-industrial-gray/20 bg-white px-3 py-2 text-[9px] font-mono outline-none focus:border-industrial-black"
+                            placeholder="Pega aquí result.json de Colab, una propuesta, o una zona exportada..."
+                          />
+                          {importMessage && (
+                            <p className={`font-mono text-[9px] uppercase tracking-widest ${
+                              assistStatus === 'error' ? 'text-red-600' : 'text-industrial-gray'
+                            }`}>
+                              {importMessage}
+                            </p>
+                          )}
+                        </div>
+                      </details>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 3: Apariencia, Prueba y Publicación */}
+              {activeTab === 'preview' && (
+                <div className="space-y-4 animate-fade-in">
+                  {/* Test Design Selection */}
+                  <section className="space-y-3">
+                    <label className="block">
+                      <span className="block font-bold text-xs uppercase tracking-widest mb-1.5">Diseño de prueba</span>
+                      <select
+                        value={previewDesignId}
+                        onChange={e => setPreviewDesignId(e.target.value)}
+                        className="w-full border border-industrial-gray/20 px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                      >
+                        {designs.map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </section>
+
+                  {/* Render parameters (only if active zone) */}
+                  {normalizedActive && (
+                    <section className="space-y-4 border-t border-industrial-gray/10 pt-3">
+                      <span className="block font-bold text-[10px] uppercase tracking-widest text-industrial-gray">
+                        Apariencia en zona activa ({normalizedActive.label}):
+                      </span>
+
+                      {/* Opacity */}
+                      <label className="block">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-bold text-xs uppercase tracking-widest">Opacidad</span>
+                          <span className="font-mono text-[10px] font-bold">{Math.round((normalizedActive.opacity ?? 0.94) * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={Math.round((normalizedActive.opacity ?? 0.94) * 100)}
+                          onChange={e => updateActiveSurface(s => ({ ...s, opacity: Number(e.target.value) / 100 }))}
+                          className="w-full accent-yellow-500"
+                        />
+                      </label>
+
+                      {/* Blend Mode */}
+                      <div>
+                        <span className="block font-bold text-xs uppercase tracking-widest mb-2">Modo de mezcla</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          {BLEND_OPTIONS.map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => updateActiveSurface(s => ({ ...s, blendMode: opt.value }))}
+                              className={`border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
+                                (normalizedActive.blendMode || 'multiply') === opt.value
+                                  ? 'border-industrial-black bg-industrial-black text-white'
+                                  : 'border-industrial-gray/20 bg-white hover:border-industrial-black'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Shadow map intensity */}
+                      {previewShadowMap && (
+                        <label className="block">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-xs uppercase tracking-widest">Intensidad de sombras</span>
+                            <span className="font-mono text-[10px] font-bold">{shadowIntensity}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={shadowIntensity}
+                            onChange={e => updateActiveSurface(s => ({ ...s, shadowOpacity: Number(e.target.value) / 100 }))}
+                            className="w-full accent-yellow-500"
+                          />
+                        </label>
+                      )}
+                    </section>
+                  )}
+
+                  {/* Name field (Fine tuning) */}
+                  {normalizedActive && (
+                    <label className="block border-t border-industrial-gray/10 pt-3">
+                      <span className="block font-bold text-xs uppercase tracking-widest mb-1.5">Nombre visible de zona</span>
+                      <input
+                        type="text"
+                        value={normalizedActive.label}
+                        onChange={e => updateActiveSurface(s => ({ ...s, label: e.target.value }))}
+                        className="w-full border border-industrial-gray/20 px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                      />
+                    </label>
+                  )}
+
+                  {/* Save and Publish */}
+                  <section className="space-y-4 border-t border-industrial-gray/10 pt-4">
+                    <h4 className="font-heading font-black text-sm uppercase tracking-tighter">
+                      Publicación
+                    </h4>
+
+                    <label className="flex items-center justify-between gap-4 border border-industrial-gray/20 p-3 bg-gray-50">
+                      <span>
+                        <span className="block font-bold text-xs uppercase tracking-widest">Estado público</span>
+                        <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-0.5">
+                          {isPublic ? 'Visible en el Studio público.' : 'Privado hasta que lo publiques.'}
+                        </span>
+                      </span>
+                      <span className={`px-2 py-0.5 border text-[9px] font-bold uppercase tracking-widest ${isPublic ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-50'}`}>
+                        {isPublic ? 'Publicado' : 'Privado'}
+                      </span>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => save(false)}
+                        disabled={isPending}
+                        className="w-full border border-industrial-gray/30 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-industrial-black hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                      >
+                        {isPending ? 'Guardando...' : 'Guardar privado'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => save(true)}
+                        disabled={isPending || !canPublish}
+                        className="w-full bg-industrial-warning px-4 py-3 text-[10px] font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50 transition-colors"
+                      >
+                        Publicar mockup
+                      </button>
+                    </div>
+
+                    {!canPublish && (
+                      <p className="font-mono text-[9px] uppercase tracking-widest text-red-650">
+                        Crea al menos una zona bordable antes de publicar.
+                      </p>
+                    )}
+
+                    {saveMessage && (
+                      <p className={`font-mono text-[10px] uppercase tracking-widest ${saveMessage.startsWith('✓') ? 'text-green-600' : 'text-industrial-gray'}`}>
+                        {saveMessage}
+                      </p>
+                    )}
+                  </section>
                 </div>
               )}
             </div>
-          </section>
-
-          {/* Fine-tuning panel */}
-          {normalizedActive && (
-            <section className="bg-white border border-industrial-gray/20 p-5">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="font-heading font-black text-lg uppercase tracking-tighter">
-                    Ajuste fino
-                  </h3>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                    {normalizedActive.label}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => deleteSurface(normalizedActive.id)}
-                  className="text-red-600 text-[10px] font-bold uppercase tracking-widest hover:underline"
-                >
-                  Eliminar
-                </button>
-              </div>
-
-              <div className="space-y-5">
-                {/* Name */}
-                <label className="block">
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Nombre visible</span>
-                  <input
-                    type="text"
-                    value={normalizedActive.label}
-                    onChange={e => updateActiveSurface(s => ({ ...s, label: e.target.value }))}
-                    className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-                  />
-                </label>
-
-                {/* Grid Resolution */}
-                <div>
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Resolución del mesh</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {GRID_SIZE_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handleGridSizeChange(opt.value)}
-                        className={`border p-3 text-center transition-colors ${
-                          normalizedActive.gridSize === opt.value
-                            ? 'border-industrial-black bg-industrial-black text-white'
-                            : 'border-industrial-gray/20 hover:border-industrial-black'
-                        }`}
-                      >
-                        <span className="block font-bold text-sm">{opt.label}</span>
-                        <span className="block font-mono text-[9px] uppercase tracking-widest text-current opacity-60">{opt.description}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Size */}
-                <label className="block">
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Tamaño recomendado</span>
-                  <select
-                    value={normalizedActive.size}
-                    onChange={e => updateActiveSurface(s => ({ ...s, size: e.target.value as CalibrationSurface['size'] }))}
-                    className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-                  >
-                    {Object.entries(SIZE_LABELS).map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
-                    ))}
-                  </select>
-                </label>
-
-                {/* Opacity */}
-                <label className="block">
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">
-                    Opacidad del diseño — {Math.round((normalizedActive.opacity ?? 0.94) * 100)}%
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={Math.round((normalizedActive.opacity ?? 0.94) * 100)}
-                    onChange={e => updateActiveSurface(s => ({ ...s, opacity: Number(e.target.value) / 100 }))}
-                    className="w-full accent-yellow-500"
-                  />
-                </label>
-
-                {/* Blend Mode */}
-                <div>
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Modo de mezcla</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {BLEND_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => updateActiveSurface(s => ({ ...s, blendMode: opt.value }))}
-                        className={`border px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                          (normalizedActive.blendMode || 'multiply') === opt.value
-                            ? 'border-industrial-black bg-industrial-black text-white'
-                            : 'border-industrial-gray/20 hover:border-industrial-black'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Shadow map intensity */}
-                {previewShadowMap && (
-                  <label className="block">
-                    <span className="block font-bold text-xs uppercase tracking-widest mb-2">
-                      Intensidad de sombras — {shadowIntensity}%
-                    </span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={shadowIntensity}
-                      onChange={e => updateActiveSurface(s => ({ ...s, shadowOpacity: Number(e.target.value) / 100 }))}
-                      className="w-full accent-yellow-500"
-                    />
-                  </label>
-                )}
-
-                {/* Reset */}
-                <button
-                  type="button"
-                  onClick={handleResetGrid}
-                  className="w-full border border-industrial-gray/20 px-3 py-3 text-left font-bold text-[10px] uppercase tracking-widest hover:border-industrial-black hover:bg-gray-50 transition-colors"
-                >
-                  ↺ Resetear grid (re-interpolar desde esquinas)
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* Test & Publish */}
-          <section className="bg-white border border-industrial-gray/20 p-5">
-            <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-4">
-              Prueba y publicación
-            </h3>
-
-            <label className="block mb-4">
-              <span className="block font-bold text-xs uppercase tracking-widest mb-2">Diseño de prueba</span>
-              <select
-                value={previewDesignId}
-                onChange={e => setPreviewDesignId(e.target.value)}
-                className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-              >
-                {designs.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex items-center justify-between gap-4 border border-industrial-gray/20 p-3 mb-4">
-              <span>
-                <span className="block font-bold text-xs uppercase tracking-widest">Estado público</span>
-                <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {isPublic ? 'Visible en el Studio público.' : 'Privado hasta que lo publiques.'}
-                </span>
-              </span>
-              <span className={`px-2 py-1 border text-[9px] font-bold uppercase tracking-widest ${isPublic ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-50'}`}>
-                {isPublic ? 'Publicado' : 'Privado'}
-              </span>
-            </label>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => save(false)}
-                disabled={isPending}
-                className="w-full border border-industrial-gray/30 px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-gray-50 disabled:opacity-50 transition-colors"
-              >
-                {isPending ? 'Guardando...' : 'Guardar privado'}
-              </button>
-              <button
-                type="button"
-                onClick={() => save(true)}
-                disabled={isPending || !canPublish}
-                className="w-full bg-industrial-warning px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50 transition-colors"
-              >
-                Publicar mockup
-              </button>
-            </div>
-
-            {!canPublish && (
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-red-600">
-                Crea al menos una zona bordable antes de publicar.
-              </p>
-            )}
-
-            {saveMessage && (
-              <p className={`mt-3 font-mono text-[10px] uppercase tracking-widest ${saveMessage.startsWith('✓') ? 'text-green-600' : 'text-industrial-gray'}`}>
-                {saveMessage}
-              </p>
-            )}
-          </section>
-        </aside>
+          </aside>
         )}
       </div>
     </div>

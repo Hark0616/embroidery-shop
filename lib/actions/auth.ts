@@ -4,8 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { logAudit } from '@/lib/logger'
+import { getLocalAdminUser, isLocalAdminBypassEnabled } from '@/lib/auth/local-bypass'
 
 export async function login(formData: FormData) {
+  if (isLocalAdminBypassEnabled()) {
+    revalidatePath('/', 'layout')
+    redirect('/admin')
+  }
+
   const supabase = await createClient()
 
   if (!supabase) {
@@ -34,6 +40,11 @@ export async function login(formData: FormData) {
 }
 
 export async function logout() {
+  if (isLocalAdminBypassEnabled()) {
+    revalidatePath('/', 'layout')
+    redirect('/login')
+  }
+
   const supabase = await createClient()
   if (supabase) {
     await supabase.auth.signOut()
@@ -44,6 +55,9 @@ export async function logout() {
 }
 
 export async function getUser() {
+  const localUser = getLocalAdminUser()
+  if (localUser) return localUser
+
   const supabase = await createClient()
   if (!supabase) return null
   const { data: { user } } = await supabase.auth.getUser()

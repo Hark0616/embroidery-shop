@@ -366,4 +366,11 @@ export type CalibrationSurface = {
   opacity?: number
   shadowOpacity?: number
   blendMode?: 'normal' | 'multiply' | 'overlay'
+
+  /** Optional audit metadata for assisted deformation proposals */
+  assistSource?: string
+  assistVersion?: string
+  assistConfidence?: number
+  assistWarnings?: string[]
+  generatedAt?: string
 }
