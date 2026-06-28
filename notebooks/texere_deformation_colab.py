@@ -6,8 +6,10 @@ Colab quick start:
 2. In Colab, enable GPU and run:
    !pip install -q pillow requests numpy opencv-python transformers accelerate safetensors
    USE_DEPTH_ANYTHING = True
+   DEPTH_MODEL = "depth-anything/Depth-Anything-V2-Base-hf"
    OUTPUT_GRID_SIZE = 7
-   DEFORMATION_STRENGTH = 1.35
+   DEFORMATION_STRENGTH = 0.75
+   DEPTH_INFLUENCE = 0.28
    %run -i texere_deformation_colab.py
 3. Upload the exported texere-colab-*.json package.
 4. Download texere-deformation-result-*.json and import it back in Texere admin.
@@ -69,7 +71,10 @@ RUNNING_IN_COLAB = is_running_in_colab()
 USE_DEPTH_ANYTHING = read_bool_config("USE_DEPTH_ANYTHING", RUNNING_IN_COLAB)
 DEPTH_MODEL = str(read_config_value("DEPTH_MODEL", "depth-anything/Depth-Anything-V2-Base-hf"))
 OUTPUT_GRID_SIZE = read_int_config("OUTPUT_GRID_SIZE", 7 if RUNNING_IN_COLAB else 0)
-DEFORMATION_STRENGTH = read_float_config("DEFORMATION_STRENGTH", 1.35)
+DEFORMATION_STRENGTH = read_float_config("DEFORMATION_STRENGTH", 0.75)
+DEPTH_INFLUENCE = read_float_config("DEPTH_INFLUENCE", 0.28)
+LOCK_BOUNDARY = read_bool_config("LOCK_BOUNDARY", True)
+MAX_DISPLACEMENT_RATIO = read_float_config("MAX_DISPLACEMENT_RATIO", 0.075)
 
 
 def process_package(package: Dict[str, Any]) -> Dict[str, Any]:
@@ -90,9 +95,9 @@ def process_package(package: Dict[str, Any]) -> Dict[str, Any]:
 
     proposals = []
     for intensity, label, multiplier in (
-        ("subtle", "Sutil", 0.85),
-        ("balanced", "Balanceada", 1.35),
-        ("marked", "Marcada", 1.9),
+        ("subtle", "Sutil", 0.55),
+        ("balanced", "Balanceada", 0.9),
+        ("marked", "Marcada", 1.25),
     ):
         mesh_points = generate_valid_deformed_mesh(corners, grid_size, signal, multiplier)
         proposals.append(
@@ -105,7 +110,7 @@ def process_package(package: Dict[str, Any]) -> Dict[str, Any]:
                 "confidence": round(float(signal["confidence"]), 3),
                 "warnings": signal["warnings"],
                 "source": signal["source"],
-                "workerVersion": "colab-depth-v2",
+                "workerVersion": "colab-cloth-v3",
                 "debugPreviewUrl": None,
             }
         )
@@ -253,6 +258,7 @@ def estimate_surface_signal(crop: Image.Image, depth_map: Optional[np.ndarray]) 
     warnings: List[str] = []
     if texture < 0.08:
         warnings.append("Low texture/depth signal; review manually")
+    warnings.append("Cloth-safe mode: boundary locked and displacement clamped")
 
     return {
         "texture": texture,
@@ -266,7 +272,7 @@ def estimate_surface_signal(crop: Image.Image, depth_map: Optional[np.ndarray]) 
         "detailMap": detail_shape,
         "confidence": confidence,
         "warnings": warnings,
-        "source": "colab-depth-v2" if depth_map is not None else "colab-shading-v2",
+        "source": "colab-depth-cloth-v3" if depth_map is not None else "colab-shading-cloth-v3",
     }
 
 
@@ -302,13 +308,15 @@ def generate_deformed_mesh(
     scale = max(min(base_width, base_height), 1.0)
     texture = signal["texture"]
     source = str(signal.get("source") or "")
-    depth_boost = 1.15 if "depth" in source else 0.82
+    depth_boost = 1.0 if "depth" in source else 0.55
 
-    curve_x = scale * (0.035 + texture * 0.065) * signal["horizontalCurve"] * intensity * DEFORMATION_STRENGTH * depth_boost
-    curve_y = scale * (0.030 + texture * 0.060) * signal["verticalDrape"] * intensity * DEFORMATION_STRENGTH * depth_boost
-    center_sag = scale * (0.025 + texture * 0.040) * intensity * DEFORMATION_STRENGTH
-    slope_strength = scale * (0.035 + texture * 0.055) * intensity * DEFORMATION_STRENGTH * depth_boost
-    wrinkle_strength = scale * (0.010 + texture * 0.025) * intensity * DEFORMATION_STRENGTH
+    curve_x = scale * (0.010 + texture * 0.020) * signal["horizontalCurve"] * intensity * DEFORMATION_STRENGTH
+    curve_y = scale * (0.008 + texture * 0.018) * signal["verticalDrape"] * intensity * DEFORMATION_STRENGTH
+    center_sag = scale * (0.006 + texture * 0.016) * intensity * DEFORMATION_STRENGTH
+    slope_strength = scale * (0.012 + texture * 0.022) * intensity * DEFORMATION_STRENGTH * DEPTH_INFLUENCE * depth_boost
+    wrinkle_strength = scale * (0.003 + texture * 0.008) * intensity * DEFORMATION_STRENGTH * DEPTH_INFLUENCE
+    profile_strength = scale * 0.022 * intensity * DEFORMATION_STRENGTH
+    height_strength = curve_y * DEPTH_INFLUENCE * 0.35 * depth_boost
     profile_x = signal.get("profileX") or [0.0]
     profile_y = signal.get("profileY") or [0.0]
     height_map = signal.get("heightMap")
@@ -324,10 +332,11 @@ def generate_deformed_mesh(
 
         for col in range(grid_size):
             u = col / (grid_size - 1)
-            point = lerp_point(left, right, u)
-            is_corner = (row in (0, grid_size - 1)) and (col in (0, grid_size - 1))
+            base_point = lerp_point(left, right, u)
+            point = base_point
+            is_boundary = row in (0, grid_size - 1) or col in (0, grid_size - 1)
 
-            if not is_corner:
+            if not (LOCK_BOUNDARY and is_boundary):
                 bell = math.sin(math.pi * u) * math.sin(math.pi * v)
                 row_bell = math.sin(math.pi * v)
                 col_bell = math.sin(math.pi * u)
@@ -341,15 +350,16 @@ def generate_deformed_mesh(
                     "x": point["x"]
                     + (u - 0.5) * curve_x * row_bell * (0.45 + col_bell * 0.55)
                     + slope_push_x * slope_strength * bell
-                    + profile_push_x * scale * 0.060 * bell * intensity * DEFORMATION_STRENGTH,
+                    + profile_push_x * profile_strength * bell,
                     "y": point["y"]
                     + center_sag * bell
                     + curve_y * col_bell * (v - 0.5) * 0.75
-                    - height_push * curve_y * 0.45 * bell
+                    - height_push * height_strength * bell
                     + slope_push_y * slope_strength * 0.65 * bell
                     + detail_push * wrinkle_strength * bell
-                    + profile_push_y * scale * 0.060 * bell * intensity * DEFORMATION_STRENGTH,
+                    + profile_push_y * profile_strength * bell,
                 }
+                point = limit_displacement(base_point, point, scale, intensity)
 
             points.append(round_point(point))
 
@@ -484,6 +494,22 @@ def round_point(point: Point) -> Point:
     return {"x": round(float(clamp(point["x"], 0, 100)), 1), "y": round(float(clamp(point["y"], 0, 100)), 1)}
 
 
+def limit_displacement(base_point: Point, point: Point, scale: float, intensity: float) -> Point:
+    dx = point["x"] - base_point["x"]
+    dy = point["y"] - base_point["y"]
+    length = math.hypot(dx, dy)
+    max_shift = min(scale * MAX_DISPLACEMENT_RATIO * min(1.2, max(0.45, intensity * DEFORMATION_STRENGTH)), 3.0)
+
+    if length <= max_shift or length < 1e-6:
+        return point
+
+    ratio = max_shift / length
+    return {
+        "x": base_point["x"] + dx * ratio,
+        "y": base_point["y"] + dy * ratio,
+    }
+
+
 def is_valid_mesh(points: List[Point], grid_size: int) -> bool:
     if len(points) != grid_size * grid_size:
         return False
@@ -572,6 +598,9 @@ def print_runtime_config() -> None:
     print(f"- Depth model: {DEPTH_MODEL}")
     print(f"- Output grid: {OUTPUT_GRID_SIZE or 'package default'}")
     print(f"- Deformation strength: {DEFORMATION_STRENGTH}")
+    print(f"- Depth influence: {DEPTH_INFLUENCE}")
+    print(f"- Boundary lock: {'enabled' if LOCK_BOUNDARY else 'disabled'}")
+    print(f"- Max displacement ratio: {MAX_DISPLACEMENT_RATIO}")
     if RUNNING_IN_COLAB and not USE_DEPTH_ANYTHING:
         print("WARNING: Colab is running without depth. Results will be a fast shading fallback.")
 
