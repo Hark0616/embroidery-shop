@@ -184,6 +184,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [assistJobId, setAssistJobId] = useState('')
   const [assistProposals, setAssistProposals] = useState<DeformationProposal[]>([])
   const [importJson, setImportJson] = useState('')
+  const [activeTab, setActiveTab] = useState<'zones' | 'mesh' | 'preview'>('zones')
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
 
@@ -312,6 +313,7 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     updateState({ ...surfaces, [uniqueId]: next }, uniqueId)
     setDraftLabel('')
     setEditMode('corners')
+    setActiveTab('mesh')
   }
 
   const deleteSurface = (id: string) => {
@@ -319,6 +321,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     delete next[id]
     const newActive = activeId === id ? (Object.keys(next)[0] || '') : activeId
     updateState(next, newActive)
+    if (Object.keys(next).length === 0) {
+      setActiveTab('zones')
+    }
   }
 
   const setActiveId = (id: string) => {
@@ -1002,369 +1007,475 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
 
         {/* Right: Controls */}
         {showSidebar && (
-          <aside className="space-y-4 overflow-y-auto" style={{ maxHeight: isFullscreen ? 'calc(100vh - 4rem)' : 'calc(100vh - 8rem)' }}>
-            {/* Zones panel */}
-            <section className="bg-white border border-industrial-gray/20 p-5">
-            <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
-              Zonas bordables
-            </h3>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray mb-4">
-              Elige una zona y ajusta el mesh sobre el mockup.
-            </p>
-
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              {presetSurfaces.map(preset => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => addSurface(preset.label, preset.size, preset.id)}
-                  className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
-                >
-                  <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
-                  <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-1">
-                    {SIZE_LABELS[preset.size]}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-2 mb-4 border-t border-industrial-gray/10 pt-4">
-              <input
-                type="text"
-                value={draftLabel}
-                onChange={e => setDraftLabel(e.target.value)}
-                className="min-w-0 flex-1 border border-industrial-gray/20 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
-                placeholder="Nombre de zona..."
-              />
+          <aside className="flex flex-col bg-white border border-industrial-gray/20" style={{ height: isFullscreen ? 'calc(100vh - 4.5rem)' : '720px', minHeight: '600px', maxHeight: isFullscreen ? 'calc(100vh - 4.5rem)' : 'calc(100vh - 8rem)' }}>
+            {/* Tabs Header */}
+            <div className="grid grid-cols-3 border-b border-industrial-gray/20 bg-gray-50 font-mono text-[9px] md:text-[10px] font-bold uppercase tracking-widest">
               <button
                 type="button"
-                onClick={() => addSurface()}
-                className="bg-industrial-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                onClick={() => setActiveTab('zones')}
+                className={`py-3 text-center border-r border-industrial-gray/10 transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+                  activeTab === 'zones'
+                    ? 'bg-white border-b-2 border-b-industrial-warning text-industrial-black font-black'
+                    : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
+                }`}
               >
-                Agregar
+                <span>📍</span>
+                <span>Zonas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('mesh')}
+                className={`py-3 text-center border-r border-industrial-gray/10 transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+                  activeTab === 'mesh'
+                    ? 'bg-white border-b-2 border-b-industrial-warning text-industrial-black font-black'
+                    : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
+                }`}
+              >
+                <span>⊞</span>
+                <span>Malla (IA)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('preview')}
+                className={`py-3 text-center transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+                  activeTab === 'preview'
+                    ? 'bg-white border-b-2 border-b-industrial-warning text-industrial-black font-black'
+                    : 'text-industrial-gray hover:bg-gray-100 hover:text-industrial-black'
+                }`}
+              >
+                <span>👁️</span>
+                <span>Probar</span>
               </button>
             </div>
 
-            <div className="space-y-2">
-              {Object.values(surfaces).map(surface => (
-                <button
-                  key={surface.id}
-                  type="button"
-                  onClick={() => setActiveId(surface.id)}
-                  className={`w-full text-left border p-3 transition-colors ${surface.id === activeId ? 'border-industrial-black bg-gray-50' : 'border-industrial-gray/20 hover:border-industrial-gray/50'}`}
-                >
-                  <span className="block font-bold text-xs uppercase tracking-widest">{surface.label}</span>
-                  <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                    {surface.size} / {surface.view} / {(surface as any).gridSize || 2}×{(surface as any).gridSize || 2} mesh
-                  </span>
-                </button>
-              ))}
-              {Object.keys(surfaces).length === 0 && (
-                <div className="border border-dashed border-industrial-gray/20 p-5 text-center font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  Aún no hay zonas calibradas.
-                </div>
-              )}
-            </div>
-          </section>
+            {/* Scrollable Content Container */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Tab 1: Zonas */}
+              {activeTab === 'zones' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div>
+                    <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-1">
+                      Zonas bordables
+                    </h3>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                      Elige una zona existente o crea una nueva para el mockup.
+                    </p>
+                  </div>
 
-          {normalizedActive && (
-            <section className="bg-white border border-industrial-gray/20 p-5">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="font-heading font-black text-lg uppercase tracking-tighter">
-                    Asistir deformación
-                  </h3>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                    Usa tus 4 esquinas como zona fija y genera una malla que siga la tela.
-                  </p>
-                </div>
-                <span className={`px-2 py-1 border text-[9px] font-bold uppercase tracking-widest ${
-                  assistStatus === 'ready'
-                    ? 'border-green-500 text-green-700 bg-green-50'
-                    : assistStatus === 'error'
-                      ? 'border-red-300 text-red-700 bg-red-50'
-                      : assistStatus === 'idle'
-                        ? 'border-industrial-gray/20 text-industrial-gray'
-                        : 'border-industrial-warning text-industrial-black bg-industrial-warning/10'
-                }`}>
-                  {ASSIST_STATUS_LABELS[assistStatus]}
-                </span>
-              </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {presetSurfaces.map(preset => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => addSurface(preset.label, preset.size, preset.id)}
+                        className="border border-industrial-gray/20 px-3 py-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                      >
+                        <span className="block font-bold text-[10px] uppercase tracking-widest">{preset.label}</span>
+                        <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-1">
+                          {SIZE_LABELS[preset.size]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
 
-              <button
-                type="button"
-                onClick={requestDeformationAssistance}
-                disabled={assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'}
-                className="w-full bg-industrial-black text-white px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
-              >
-                {assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'
-                  ? 'Generando propuestas...'
-                  : 'Asistir deformación'}
-              </button>
-
-              {assistJobId && (
-                <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-industrial-gray break-all">
-                  Job GPU: {assistJobId}
-                </p>
-              )}
-
-              {assistMessage && (
-                <p className={`mt-3 font-mono text-[10px] uppercase tracking-widest ${
-                  assistStatus === 'error' ? 'text-red-600' : 'text-industrial-gray'
-                }`}>
-                  {assistMessage}
-                </p>
-              )}
-
-              {assistProposals.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {assistProposals.map(proposal => (
+                  <div className="flex gap-2 border-t border-industrial-gray/10 pt-4">
+                    <input
+                      type="text"
+                      value={draftLabel}
+                      onChange={e => setDraftLabel(e.target.value)}
+                      className="min-w-0 flex-1 border border-industrial-gray/20 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                      placeholder="Nombre de zona..."
+                    />
                     <button
-                      key={proposal.id}
                       type="button"
-                      onClick={() => applyDeformationProposal(proposal)}
-                      className="w-full border border-industrial-gray/20 p-3 text-left hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                      onClick={() => addSurface()}
+                      className="bg-industrial-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
                     >
-                      <span className="flex items-center justify-between gap-3">
-                        <span className="font-bold text-[10px] uppercase tracking-widest">{proposal.label}</span>
-                        <span className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
-                          {proposal.gridSize}×{proposal.gridSize} / {Math.round(proposal.confidence * 100)}%
+                      Agregar
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 border-t border-industrial-gray/10 pt-4">
+                    <span className="block font-bold text-[10px] uppercase tracking-widest mb-2 text-industrial-gray">
+                      Zonas configuradas:
+                    </span>
+                    {Object.values(surfaces).map(surface => (
+                      <button
+                        key={surface.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveId(surface.id)
+                          setActiveTab('mesh')
+                        }}
+                        className={`w-full text-left border p-3 transition-colors ${
+                          surface.id === activeId ? 'border-industrial-black bg-gray-50' : 'border-industrial-gray/20 hover:border-industrial-gray/50'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="block font-bold text-xs uppercase tracking-widest">{surface.label}</span>
+                          {surface.id === activeId && <span className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Activa →</span>}
+                        </div>
+                        <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray mt-1">
+                          {surface.size} / {surface.view} / {(surface as any).gridSize || 2}×{(surface as any).gridSize || 2} mesh
+                        </span>
+                      </button>
+                    ))}
+                    {Object.keys(surfaces).length === 0 && (
+                      <div className="border border-dashed border-industrial-gray/20 p-5 text-center font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
+                        Aún no hay zonas creadas. Usa los presets de arriba para empezar.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Malla (IA y Ajustes de red) */}
+              {activeTab === 'mesh' && (
+                <div className="space-y-4 animate-fade-in">
+                  {!normalizedActive ? (
+                    <div className="border border-dashed border-industrial-gray/20 p-8 text-center space-y-4">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-industrial-gray">
+                        No hay ninguna zona seleccionada.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('zones')}
+                        className="bg-industrial-black text-white px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black transition-colors"
+                      >
+                        ← Seleccionar o Crear Zona
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Assist deformation (IA) */}
+                      <section className="space-y-4 border border-industrial-gray/10 p-4 bg-gray-50">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <h4 className="font-heading font-black text-sm uppercase tracking-tighter">
+                              Asistir deformación
+                            </h4>
+                            <p className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-0.5">
+                              Usa las 4 esquinas fijas y genera una malla que siga la tela.
+                            </p>
+                          </div>
+                          <span className={`px-2 py-0.5 border text-[9px] font-bold uppercase tracking-widest ${
+                            assistStatus === 'ready'
+                              ? 'border-green-500 text-green-700 bg-green-50'
+                              : assistStatus === 'error'
+                                ? 'border-red-300 text-red-700 bg-red-50'
+                                : assistStatus === 'idle'
+                                  ? 'border-industrial-gray/20 text-industrial-gray'
+                                  : 'border-industrial-warning text-industrial-black bg-industrial-warning/10'
+                          }`}>
+                            {ASSIST_STATUS_LABELS[assistStatus]}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={requestDeformationAssistance}
+                          disabled={assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'}
+                          className="w-full bg-industrial-black text-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-industrial-warning hover:text-industrial-black disabled:opacity-50 transition-colors"
+                        >
+                          {assistStatus === 'preparing' || assistStatus === 'queued' || assistStatus === 'analyzing'
+                            ? 'Generando propuestas...'
+                            : 'Asistir deformación'}
+                        </button>
+
+                        {assistJobId && (
+                          <p className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray break-all">
+                            Job GPU: {assistJobId}
+                          </p>
+                        )}
+
+                        {assistMessage && (
+                          <p className={`font-mono text-[10px] uppercase tracking-widest ${
+                            assistStatus === 'error' ? 'text-red-600' : 'text-industrial-gray'
+                          }`}>
+                            {assistMessage}
+                          </p>
+                        )}
+
+                        {assistProposals.length > 0 && (
+                          <div className="space-y-2 border-t border-industrial-gray/10 pt-3">
+                            <span className="block font-bold text-[9px] uppercase tracking-widest text-industrial-gray">Propuestas encontradas:</span>
+                            {assistProposals.map(proposal => (
+                              <button
+                                key={proposal.id}
+                                type="button"
+                                onClick={() => applyDeformationProposal(proposal)}
+                                className="w-full border border-industrial-gray/20 p-2.5 text-left bg-white hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                              >
+                                <span className="flex items-center justify-between gap-3">
+                                  <span className="font-bold text-[10px] uppercase tracking-widest">{proposal.label}</span>
+                                  <span className="font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                                    {proposal.gridSize}×{proposal.gridSize} / {Math.round(proposal.confidence * 100)}%
+                                  </span>
+                                </span>
+                                {proposal.warnings.length > 0 && (
+                                  <span className="block mt-1.5 font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
+                                    {proposal.warnings.join(' · ')}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+
+                      {/* Mesh Settings */}
+                      <section className="space-y-4">
+                        <div className="flex items-center justify-between border-b border-industrial-gray/10 pb-2">
+                          <span className="font-heading font-black text-sm uppercase tracking-tighter">
+                            Configuración de malla
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`¿Seguro que deseas eliminar la zona "${normalizedActive.label}"?`)) {
+                                deleteSurface(normalizedActive.id)
+                              }
+                            }}
+                            className="text-red-600 text-[10px] font-bold uppercase tracking-widest hover:underline"
+                          >
+                            Eliminar zona
+                          </button>
+                        </div>
+
+                        {/* Grid Resolution */}
+                        <div>
+                          <span className="block font-bold text-xs uppercase tracking-widest mb-2">Resolución del mesh</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {GRID_SIZE_OPTIONS.map(opt => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => handleGridSizeChange(opt.value)}
+                                className={`border p-2 text-center transition-colors ${
+                                  normalizedActive.gridSize === opt.value
+                                    ? 'border-industrial-black bg-industrial-black text-white'
+                                    : 'border-industrial-gray/20 hover:border-industrial-black bg-white text-industrial-black'
+                                }`}
+                              >
+                                <span className="block font-bold text-xs">{opt.label}</span>
+                                <span className="block font-mono text-[8px] uppercase tracking-widest text-current opacity-60 mt-0.5">{opt.description}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Size */}
+                        <label className="block">
+                          <span className="block font-bold text-xs uppercase tracking-widest mb-1.5">Tamaño recomendado</span>
+                          <select
+                            value={normalizedActive.size}
+                            onChange={e => updateActiveSurface(s => ({ ...s, size: e.target.value as CalibrationSurface['size'] }))}
+                            className="w-full border border-industrial-gray/20 px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                          >
+                            {Object.entries(SIZE_LABELS).map(([v, l]) => (
+                              <option key={v} value={v}>{l}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        {/* Reset grid */}
+                        <button
+                          type="button"
+                          onClick={handleResetGrid}
+                          className="w-full border border-industrial-gray/20 bg-white px-3 py-2.5 text-center font-bold text-[10px] uppercase tracking-widest hover:border-industrial-black hover:bg-gray-50 transition-colors"
+                        >
+                          ↺ Resetear grid (re-interpolar)
+                        </button>
+                      </section>
+
+                      {/* Import/Export advanced (Details) */}
+                      <details className="group border border-industrial-gray/20 mt-4 bg-white">
+                        <summary className="flex justify-between items-center p-3 cursor-pointer select-none font-mono text-[9px] uppercase tracking-widest hover:bg-gray-50">
+                          <span>⚙️ JSON Avanzado (Importar/Exportar)</span>
+                          <span className="transition-transform group-open:rotate-180 text-[8px]">▼</span>
+                        </summary>
+                        <div className="p-3 border-t border-industrial-gray/10 bg-gray-50 space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={exportActiveSurface}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Exportar JSON
+                            </button>
+                            <button
+                              type="button"
+                              onClick={importActiveSurface}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Importar JSON
+                            </button>
+                          </div>
+                          <textarea
+                            value={importJson}
+                            onChange={event => setImportJson(event.target.value)}
+                            className="min-h-[80px] w-full border border-industrial-gray/20 bg-white px-3 py-2 text-[9px] font-mono outline-none focus:border-industrial-black"
+                            placeholder="Pega aquí una grilla exportada para reemplazar la zona activa..."
+                          />
+                        </div>
+                      </details>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 3: Apariencia, Prueba y Publicación */}
+              {activeTab === 'preview' && (
+                <div className="space-y-4 animate-fade-in">
+                  {/* Test Design Selection */}
+                  <section className="space-y-3">
+                    <h4 className="font-heading font-black text-sm uppercase tracking-tighter pb-1 border-b border-industrial-gray/10">
+                      Visualizar y probar
+                    </h4>
+                    <label className="block">
+                      <span className="block font-bold text-xs uppercase tracking-widest mb-1.5">Diseño de prueba</span>
+                      <select
+                        value={previewDesignId}
+                        onChange={e => setPreviewDesignId(e.target.value)}
+                        className="w-full border border-industrial-gray/20 px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                      >
+                        {designs.map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </section>
+
+                  {/* Render parameters (only if active zone) */}
+                  {normalizedActive && (
+                    <section className="space-y-4 border-t border-industrial-gray/10 pt-3">
+                      <span className="block font-bold text-[10px] uppercase tracking-widest text-industrial-gray">
+                        Apariencia en zona activa ({normalizedActive.label}):
+                      </span>
+
+                      {/* Opacity */}
+                      <label className="block">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-bold text-xs uppercase tracking-widest">Opacidad</span>
+                          <span className="font-mono text-[10px] font-bold">{Math.round((normalizedActive.opacity ?? 0.94) * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={Math.round((normalizedActive.opacity ?? 0.94) * 100)}
+                          onChange={e => updateActiveSurface(s => ({ ...s, opacity: Number(e.target.value) / 100 }))}
+                          className="w-full accent-yellow-500"
+                        />
+                      </label>
+
+                      {/* Blend Mode */}
+                      <div>
+                        <span className="block font-bold text-xs uppercase tracking-widest mb-2">Modo de mezcla</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          {BLEND_OPTIONS.map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => updateActiveSurface(s => ({ ...s, blendMode: opt.value }))}
+                              className={`border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
+                                (normalizedActive.blendMode || 'multiply') === opt.value
+                                  ? 'border-industrial-black bg-industrial-black text-white'
+                                  : 'border-industrial-gray/20 bg-white hover:border-industrial-black'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Shadow map intensity */}
+                      {previewShadowMap && (
+                        <label className="block">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-xs uppercase tracking-widest">Intensidad de sombras</span>
+                            <span className="font-mono text-[10px] font-bold">{shadowIntensity}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={shadowIntensity}
+                            onChange={e => updateActiveSurface(s => ({ ...s, shadowOpacity: Number(e.target.value) / 100 }))}
+                            className="w-full accent-yellow-500"
+                          />
+                        </label>
+                      )}
+                    </section>
+                  )}
+
+                  {/* Name field (Fine tuning) */}
+                  {normalizedActive && (
+                    <label className="block border-t border-industrial-gray/10 pt-3">
+                      <span className="block font-bold text-xs uppercase tracking-widest mb-1.5">Nombre visible de zona</span>
+                      <input
+                        type="text"
+                        value={normalizedActive.label}
+                        onChange={e => updateActiveSurface(s => ({ ...s, label: e.target.value }))}
+                        className="w-full border border-industrial-gray/20 px-3 py-2 text-xs font-mono outline-none focus:border-industrial-black"
+                      />
+                    </label>
+                  )}
+
+                  {/* Save and Publish */}
+                  <section className="space-y-4 border-t border-industrial-gray/10 pt-4">
+                    <h4 className="font-heading font-black text-sm uppercase tracking-tighter">
+                      Publicación
+                    </h4>
+
+                    <label className="flex items-center justify-between gap-4 border border-industrial-gray/20 p-3 bg-gray-50">
+                      <span>
+                        <span className="block font-bold text-xs uppercase tracking-widest">Estado público</span>
+                        <span className="block font-mono text-[9px] uppercase tracking-widest text-industrial-gray mt-0.5">
+                          {isPublic ? 'Visible en el Studio público.' : 'Privado hasta que lo publiques.'}
                         </span>
                       </span>
-                      {proposal.warnings.length > 0 && (
-                        <span className="block mt-2 font-mono text-[9px] uppercase tracking-widest text-industrial-gray">
-                          {proposal.warnings.join(' · ')}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                      <span className={`px-2 py-0.5 border text-[9px] font-bold uppercase tracking-widest ${isPublic ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-50'}`}>
+                        {isPublic ? 'Publicado' : 'Privado'}
+                      </span>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => save(false)}
+                        disabled={isPending}
+                        className="w-full border border-industrial-gray/30 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-industrial-black hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                      >
+                        {isPending ? 'Guardando...' : 'Guardar privado'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => save(true)}
+                        disabled={isPending || !canPublish}
+                        className="w-full bg-industrial-warning px-4 py-3 text-[10px] font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50 transition-colors"
+                      >
+                        Publicar mockup
+                      </button>
+                    </div>
+
+                    {!canPublish && (
+                      <p className="font-mono text-[9px] uppercase tracking-widest text-red-650">
+                        Crea al menos una zona bordable antes de publicar.
+                      </p>
+                    )}
+
+                    {saveMessage && (
+                      <p className={`font-mono text-[10px] uppercase tracking-widest ${saveMessage.startsWith('✓') ? 'text-green-600' : 'text-industrial-gray'}`}>
+                        {saveMessage}
+                      </p>
+                    )}
+                  </section>
                 </div>
               )}
-
-              <div className="mt-5 border-t border-industrial-gray/10 pt-4">
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={exportActiveSurface}
-                    className="border border-industrial-gray/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest hover:border-industrial-black"
-                  >
-                    Exportar JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={importActiveSurface}
-                    className="border border-industrial-gray/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest hover:border-industrial-black"
-                  >
-                    Importar JSON
-                  </button>
-                </div>
-                <textarea
-                  value={importJson}
-                  onChange={event => setImportJson(event.target.value)}
-                  className="min-h-[86px] w-full border border-industrial-gray/20 bg-white px-3 py-2 text-[10px] font-mono outline-none focus:border-industrial-black"
-                  placeholder="Pega aquí una grilla exportada para reemplazar la zona activa..."
-                />
-              </div>
-            </section>
-          )}
-
-          {/* Fine-tuning panel */}
-          {normalizedActive && (
-            <section className="bg-white border border-industrial-gray/20 p-5">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="font-heading font-black text-lg uppercase tracking-tighter">
-                    Ajuste fino
-                  </h3>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                    {normalizedActive.label}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => deleteSurface(normalizedActive.id)}
-                  className="text-red-600 text-[10px] font-bold uppercase tracking-widest hover:underline"
-                >
-                  Eliminar
-                </button>
-              </div>
-
-              <div className="space-y-5">
-                {/* Name */}
-                <label className="block">
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Nombre visible</span>
-                  <input
-                    type="text"
-                    value={normalizedActive.label}
-                    onChange={e => updateActiveSurface(s => ({ ...s, label: e.target.value }))}
-                    className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-                  />
-                </label>
-
-                {/* Grid Resolution */}
-                <div>
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Resolución del mesh</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {GRID_SIZE_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handleGridSizeChange(opt.value)}
-                        className={`border p-3 text-center transition-colors ${
-                          normalizedActive.gridSize === opt.value
-                            ? 'border-industrial-black bg-industrial-black text-white'
-                            : 'border-industrial-gray/20 hover:border-industrial-black'
-                        }`}
-                      >
-                        <span className="block font-bold text-sm">{opt.label}</span>
-                        <span className="block font-mono text-[9px] uppercase tracking-widest text-current opacity-60">{opt.description}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Size */}
-                <label className="block">
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Tamaño recomendado</span>
-                  <select
-                    value={normalizedActive.size}
-                    onChange={e => updateActiveSurface(s => ({ ...s, size: e.target.value as CalibrationSurface['size'] }))}
-                    className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-                  >
-                    {Object.entries(SIZE_LABELS).map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
-                    ))}
-                  </select>
-                </label>
-
-                {/* Opacity */}
-                <label className="block">
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">
-                    Opacidad del diseño — {Math.round((normalizedActive.opacity ?? 0.94) * 100)}%
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={Math.round((normalizedActive.opacity ?? 0.94) * 100)}
-                    onChange={e => updateActiveSurface(s => ({ ...s, opacity: Number(e.target.value) / 100 }))}
-                    className="w-full accent-yellow-500"
-                  />
-                </label>
-
-                {/* Blend Mode */}
-                <div>
-                  <span className="block font-bold text-xs uppercase tracking-widest mb-2">Modo de mezcla</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {BLEND_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => updateActiveSurface(s => ({ ...s, blendMode: opt.value }))}
-                        className={`border px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                          (normalizedActive.blendMode || 'multiply') === opt.value
-                            ? 'border-industrial-black bg-industrial-black text-white'
-                            : 'border-industrial-gray/20 hover:border-industrial-black'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Shadow map intensity */}
-                {previewShadowMap && (
-                  <label className="block">
-                    <span className="block font-bold text-xs uppercase tracking-widest mb-2">
-                      Intensidad de sombras — {shadowIntensity}%
-                    </span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={shadowIntensity}
-                      onChange={e => updateActiveSurface(s => ({ ...s, shadowOpacity: Number(e.target.value) / 100 }))}
-                      className="w-full accent-yellow-500"
-                    />
-                  </label>
-                )}
-
-                {/* Reset */}
-                <button
-                  type="button"
-                  onClick={handleResetGrid}
-                  className="w-full border border-industrial-gray/20 px-3 py-3 text-left font-bold text-[10px] uppercase tracking-widest hover:border-industrial-black hover:bg-gray-50 transition-colors"
-                >
-                  ↺ Resetear grid (re-interpolar desde esquinas)
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* Test & Publish */}
-          <section className="bg-white border border-industrial-gray/20 p-5">
-            <h3 className="font-heading font-black text-lg uppercase tracking-tighter mb-4">
-              Prueba y publicación
-            </h3>
-
-            <label className="block mb-4">
-              <span className="block font-bold text-xs uppercase tracking-widest mb-2">Diseño de prueba</span>
-              <select
-                value={previewDesignId}
-                onChange={e => setPreviewDesignId(e.target.value)}
-                className="w-full border border-industrial-gray/20 px-3 py-2 text-sm font-mono outline-none focus:border-industrial-black"
-              >
-                {designs.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex items-center justify-between gap-4 border border-industrial-gray/20 p-3 mb-4">
-              <span>
-                <span className="block font-bold text-xs uppercase tracking-widest">Estado público</span>
-                <span className="block font-mono text-[10px] uppercase tracking-widest text-industrial-gray">
-                  {isPublic ? 'Visible en el Studio público.' : 'Privado hasta que lo publiques.'}
-                </span>
-              </span>
-              <span className={`px-2 py-1 border text-[9px] font-bold uppercase tracking-widest ${isPublic ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-300 text-gray-500 bg-gray-50'}`}>
-                {isPublic ? 'Publicado' : 'Privado'}
-              </span>
-            </label>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => save(false)}
-                disabled={isPending}
-                className="w-full border border-industrial-gray/30 px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-gray-50 disabled:opacity-50 transition-colors"
-              >
-                {isPending ? 'Guardando...' : 'Guardar privado'}
-              </button>
-              <button
-                type="button"
-                onClick={() => save(true)}
-                disabled={isPending || !canPublish}
-                className="w-full bg-industrial-warning px-5 py-4 text-xs font-black uppercase tracking-widest text-industrial-black hover:bg-industrial-black hover:text-white disabled:opacity-50 transition-colors"
-              >
-                Publicar mockup
-              </button>
             </div>
-
-            {!canPublish && (
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-red-600">
-                Crea al menos una zona bordable antes de publicar.
-              </p>
-            )}
-
-            {saveMessage && (
-              <p className={`mt-3 font-mono text-[10px] uppercase tracking-widest ${saveMessage.startsWith('✓') ? 'text-green-600' : 'text-industrial-gray'}`}>
-                {saveMessage}
-              </p>
-            )}
-          </section>
-        </aside>
+          </aside>
         )}
       </div>
     </div>
