@@ -211,9 +211,11 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
   const [assistJobId, setAssistJobId] = useState('')
   const [assistProposals, setAssistProposals] = useState<DeformationProposal[]>([])
   const [importJson, setImportJson] = useState('')
+  const [importMessage, setImportMessage] = useState('')
   const [activeTab, setActiveTab] = useState<'zones' | 'mesh' | 'preview'>('zones')
 
   const imageContainerRef = useRef<HTMLDivElement>(null)
+  const importFileInputRef = useRef<HTMLInputElement>(null)
   const leftSectionRef = useRef<HTMLElement>(null)
   const [leftHeight, setLeftHeight] = useState<number | null>(null)
 
@@ -667,26 +669,57 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
     setAssistMessage('Paquete Colab descargado. Súbelo al notebook y luego importa el result.json aquí.')
   }
 
-  const importActiveSurface = () => {
-    if (!normalizedActive || !activeId || !importJson.trim()) return
+  const importJsonText = (rawText: string) => {
+    if (!normalizedActive || !activeId) {
+      setImportMessage('Selecciona una zona antes de importar.')
+      return
+    }
+
+    if (!rawText.trim()) {
+      setImportMessage('Pega un JSON o sube un archivo result.json.')
+      return
+    }
 
     try {
-      const parsed = JSON.parse(importJson)
+      const parsed = JSON.parse(rawText)
       const proposals = extractDeformationProposalsFromImport(parsed)
       assertValidImportedProposals(proposals)
+      setImportJson(rawText)
 
       if (proposals.length === 1) {
         applyDeformationProposal(proposals[0])
+        setImportMessage('Resultado importado y aplicado en la zona activa.')
         setAssistMessage('Resultado importado y aplicado en la zona activa.')
         return
       }
 
       setAssistProposals(proposals)
       setAssistStatus('ready')
-      setAssistMessage('Resultado importado. Elige una propuesta para aplicarla.')
+      setImportMessage(`Resultado importado: ${proposals.length} propuestas cargadas. Elige una arriba para aplicarla.`)
+      setAssistMessage('Resultado importado. Elige una propuesta en "Propuestas encontradas".')
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'JSON inválido.'
       setAssistStatus('error')
-      setAssistMessage(error instanceof Error ? error.message : 'JSON inválido.')
+      setImportMessage(message)
+      setAssistMessage(message)
+    }
+  }
+
+  const importActiveSurface = () => {
+    importJsonText(importJson)
+  }
+
+  const importResultFile = async (file: File | null) => {
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      importJsonText(text)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo leer el archivo.'
+      setImportMessage(message)
+      setAssistMessage(message)
+      setAssistStatus('error')
     }
   }
 
@@ -1344,12 +1377,29 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                         </summary>
                         <div className="p-3 border-t border-industrial-gray/10 bg-gray-50 space-y-3">
                           <div className="grid grid-cols-2 gap-2">
+                            <input
+                              ref={importFileInputRef}
+                              type="file"
+                              accept="application/json,.json"
+                              className="hidden"
+                              onChange={event => {
+                                importResultFile(event.target.files?.[0] || null)
+                                event.currentTarget.value = ''
+                              }}
+                            />
                             <button
                               type="button"
                               onClick={exportColabPackage}
                               className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
                             >
                               Paquete Colab
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => importFileInputRef.current?.click()}
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                            >
+                              Subir result.json
                             </button>
                             <button
                               type="button"
@@ -1361,9 +1411,9 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                             <button
                               type="button"
                               onClick={importActiveSurface}
-                              className="col-span-2 bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
+                              className="bg-white border border-industrial-gray/20 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-industrial-black"
                             >
-                              Importar resultado
+                              Importar texto
                             </button>
                           </div>
                           <textarea
@@ -1372,6 +1422,13 @@ export default function MockupCalibrator({ mockup, designs }: MockupCalibratorPr
                             className="min-h-[80px] w-full border border-industrial-gray/20 bg-white px-3 py-2 text-[9px] font-mono outline-none focus:border-industrial-black"
                             placeholder="Pega aquí result.json de Colab, una propuesta, o una zona exportada..."
                           />
+                          {importMessage && (
+                            <p className={`font-mono text-[9px] uppercase tracking-widest ${
+                              assistStatus === 'error' ? 'text-red-600' : 'text-industrial-gray'
+                            }`}>
+                              {importMessage}
+                            </p>
+                          )}
                         </div>
                       </details>
                     </>
